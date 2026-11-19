@@ -1,0 +1,31 @@
+name: Export the Android signing key (private repo only)
+
+# One-off, for moving releases to the public BRoliix/Nyeko: the key every Nyeko APK so far was signed with sits in this
+# private repository's Actions cache (nyeko-debug-keystore-v2). This hands it over as a one-day artifact of a PRIVATE
+# repository, so it can be saved as the NYEKO_DEBUG_KEYSTORE secret of the public one:
+#   base64 -i debug.keystore | gh secret set NYEKO_DEBUG_KEYSTORE --repo BRoliix/Nyeko
+# On a public repository it refuses to run: an artifact there could be downloaded by anyone signed in to GitHub.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    if: github.event.repository.private == true
+    runs-on: ubuntu-24.04
+    steps:
+      - name: The kept key
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: nyeko-debug-keystore-v2
+          fail-on-cache-miss: true
+      - name: Its fingerprint (compare with the installed app's)
+        run: keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -v | grep -i "SHA256:"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: nyeko-signing-key
+          path: ~/.android/debug.keystore
+          retention-days: 1

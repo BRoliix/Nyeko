@@ -202,38 +202,23 @@ jobs:
         with: { node-version: '22' }
       - uses: gradle/actions/setup-gradle@v5
 
-      # The same signing key on every build, or Android refuses to install the new APK over the old one. Where it comes
-      # from, first found: the repository secret NYEKO_DEBUG_KEYSTORE (base64 of a keystore, alias androiddebugkey,
-      # passwords "android"), then main's Actions cache. Gradle signs with it explicitly (NYEKO_KEYSTORE, app/build.gradle.kts). A new key
-      # is made only when there is none: the run then says so, and keeps it as a one-day artifact to save as the secret.
-      - name: Signing key, kept between runs
-        uses: actions/cache@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: nyeko-debug-keystore-v2
-      - name: Signing key from the repository secret, or a new one
-        id: key
+      # The same signing key on every build, or Android refuses to install the new APK over the old one. It comes only from
+      # the repository secret NYEKO_DEBUG_KEYSTORE (base64 of a keystore, alias androiddebugkey, passwords "android"); Gradle
+      # signs with it explicitly (NYEKO_KEYSTORE, app/build.gradle.kts). The key is never cached and never uploaded: on the
+      # public repository, artifacts and caches are not the place for it. No secret, no release.
+      - name: Signing key from the repository secret
         env:
           KS: ${{ secrets.NYEKO_DEBUG_KEYSTORE }}
         run: |
-          mkdir -p ~/.android
-          if [ -n "$KS" ]; then echo "$KS" | base64 -d > ~/.android/debug.keystore; echo "from=secret" >> "$GITHUB_OUTPUT"
-          elif [ -s ~/.android/debug.keystore ]; then echo "from=cache" >> "$GITHUB_OUTPUT"
-          else
-            keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -keypass android \
-              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Nyeko Debug,O=Nyeko,C=AE"
-            echo "from=new" >> "$GITHUB_OUTPUT"
-            echo "::warning::No signing key was kept: a new one was made. Phones with an older Nyeko must uninstall it once. Save this run's nyeko-signing-key artifact as the NYEKO_DEBUG_KEYSTORE secret (base64) so it never changes again."
+          if [ -z "$KS" ]; then
+            echo "::error::Set the NYEKO_DEBUG_KEYSTORE secret first (Settings > Secrets and variables > Actions): the base64 of the keystore every Nyeko APK is signed with."
+            exit 1
           fi
+          mkdir -p ~/.android
+          echo "$KS" | base64 -d > ~/.android/debug.keystore
           echo "NYEKO_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
           echo "NYEKO_KEYSTORE_PASSWORD=android" >> "$GITHUB_ENV"   # the standard debug-key password, not a secret
           keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep -i "SHA-256" || true
-      - uses: actions/upload-artifact@v7
-        if: steps.key.outputs.from == 'new'
-        with:
-          name: nyeko-signing-key
-          path: ~/.android/debug.keystore
-          retention-days: 1
 
       - name: Tests and the APK
         env:
