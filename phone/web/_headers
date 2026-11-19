@@ -1,0 +1,18 @@
+# Cloudflare Pages headers. Nothing is loaded from anywhere but this site; the only connection out is the relay (wss).
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' wss:; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self), publickey-credentials-create=(self)
+/sw.js
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/
+  Cache-Control: no-cache
+/app.js
+  Cache-Control: no-cache
+/relay.js
+  Cache-Control: no-cache
+/style.css
+  Cache-Control: no-cache

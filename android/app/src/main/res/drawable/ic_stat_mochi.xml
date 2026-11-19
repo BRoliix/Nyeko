@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One-colour Nyo for the status bar: his head with its cheek fluff and ears, the eyes cut out (scripts/nyeko-icons.py). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="120" android:viewportHeight="120">
+    <group android:translateY="3">
+        <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+            android:pathData="M60,30 C76,30 88,36 94,48 C98,56 99,63 98,69 L105,73 L97,77 L102,83 L93,85 C86,95 74,100 60,100 C46,100 34,95 27,85 L18,83 L23,77 L15,73 L22,69 C21,63 22,56 26,48 C32,36 44,30 60,30 Z M54,64 a9,9 0 1 0 -18,0 a9,9 0 1 0 18,0 Z M84,64 a9,9 0 1 0 -18,0 a9,9 0 1 0 18,0 Z" />
+        <path android:fillColor="#FFFFFFFF" android:pathData="M31,50 C28,36 29,24 33,14 C42,19 50,27 55,37 Z" />
+        <path android:fillColor="#FFFFFFFF" android:pathData="M89,50 C92,36 91,24 87,14 C78,19 70,27 65,37 Z" />
+    </group>
+</vector>

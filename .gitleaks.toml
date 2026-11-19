@@ -1,0 +1,17 @@
+# gitleaks (scripts/nyeko-publish.sh runs it before every publish): its default rules, minus the made-up keys of the
+# tests and the relay's published test vectors.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures and test vectors (made-up keys)"
+paths = [
+  '''(^|/)tests?/''',
+  '''(^|/)src/test/''',
+  '''android/relay/test-vectors\.json''',
+]
+regexTarget = "line"
+regexes = [
+  '''privateKey: P256\.Signing\.PrivateKey''',
+  '''test-secret-0123456789''',
+]

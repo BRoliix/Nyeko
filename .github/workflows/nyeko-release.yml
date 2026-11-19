@@ -1,0 +1,317 @@
+name: Release Nyeko
+
+# One button, one release. Run it from the Actions tab → Release Nyeko → Run workflow (on main).
+#
+# It builds the three installers from the same commit, with one build number:
+#   Nyeko.dmg                 the Mac app (universal, signed with MAC_CERT_P12 / MAC_CERT_PASSWORD when they are set)
+#   Nyeko-Windows-setup.exe   the Windows app (not code-signed: SmartScreen → More info → Run anyway)
+#   Nyeko.apk                 the Android app (the same debug key every time, so it installs over the last one)
+# and publishes them together as one GitHub Release, "Nyeko 1.0.<build>" (tag nyeko-1.0.<build>), marked Latest. The
+# download page (phone/web/_worker.js, /downloads/<mac|windows|android>) and the Android app's updater serve the newest
+# release that has each file. If one app fails to build, nothing is published.
+#
+# Afterwards the three newest Nyeko releases are kept and older ones deleted, and so are the old per-app releases
+# (nyeko-android-v…, nyeko-mac-v…, nyeko-windows-v…) once the live download page serves the new one.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nyeko-release
+  cancel-in-progress: false
+
+jobs:
+  number:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.n.outputs.build }}
+      version: ${{ steps.n.outputs.version }}
+    steps:
+      # One number for the three apps. It starts above the per-app builds that came before (the last Android one was
+      # versionCode 113), so a phone that has an older build still sees this one as newer.
+      - id: n
+        run: |
+          b=$((GITHUB_RUN_NUMBER + 20))
+          echo "build=$b" >> "$GITHUB_OUTPUT"
+          echo "version=1.0.$b" >> "$GITHUB_OUTPUT"
+
+  mac:
+    needs: number
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      BUILD: ${{ needs.number.outputs.build }}
+      VERSION: ${{ needs.number.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # Nyeko uses macOS 26's speech APIs (SpeechAnalyzer): the newest Xcode on the runner, 26 or later.
+      - name: Pick Xcode 26
+        run: |
+          XC=$(ls -d /Applications/Xcode_2[6-9]*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XC" ] || { echo "::error::No Xcode 26 on this runner."; exit 1; }
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
+
+      - name: Signing identity
+        id: sign
+        env:
+          MAC_CERT_P12: ${{ secrets.MAC_CERT_P12 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          if [ -z "${MAC_CERT_P12}" ]; then
+            echo "::warning::No MAC_CERT_P12 secret: the app is signed ad hoc (macOS will ask for its permissions again)."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KC="${RUNNER_TEMP}/nyeko.keychain-db"
+          security create-keychain -p "" "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "" "$KC"
+          echo "${MAC_CERT_P12}" | base64 --decode > "${RUNNER_TEMP}/cert.p12"
+          security import "${RUNNER_TEMP}/cert.p12" -k "$KC" -P "${MAC_CERT_PASSWORD}" -T /usr/bin/codesign
+          rm -f "${RUNNER_TEMP}/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          IDENTITY=$(security find-identity -v -p codesigning "$KC" | awk -F'"' '/Apple Development|Developer ID Application/ {print $2; exit}')
+          [ -n "$IDENTITY" ] || { echo "::error::The .p12 holds no code-signing identity."; exit 1; }
+          TEAM=$(security find-certificate -c "$IDENTITY" -p "$KC" | openssl x509 -noout -subject -nameopt multiline \
+            | awk -F' = ' '/organizationalUnitName/ {print $2; exit}')
+          echo "Signing as ${IDENTITY%% (*} (team ${TEAM})."
+          {
+            echo "signed=true"
+            echo "identity=${IDENTITY}"
+            echo "team=${TEAM}"
+            echo "keychain=${KC}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build Nyeko
+        env:
+          SIGNED: ${{ steps.sign.outputs.signed }}
+          IDENTITY: ${{ steps.sign.outputs.identity }}
+          TEAM: ${{ steps.sign.outputs.team }}
+          KC: ${{ steps.sign.outputs.keychain }}
+        run: |
+          set -o pipefail
+          cd NotchBuddy && xcodegen
+          if [ "$SIGNED" = "true" ]; then
+            SIGNING=(CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=${IDENTITY}" "DEVELOPMENT_TEAM=${TEAM}" PROVISIONING_PROFILE_SPECIFIER= "OTHER_CODE_SIGN_FLAGS=--keychain ${KC}")
+          else
+            SIGNING=(CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=)
+          fi
+          # Apple silicon and Intel Macs alike (a work Mac may be either).
+          xcodebuild -project NotchBuddy.xcodeproj -scheme Nyeko -configuration DebugLocal \
+            -derivedDataPath "${RUNNER_TEMP}/dd" ONLY_ACTIVE_ARCH=NO "ARCHS=arm64 x86_64" "${SIGNING[@]}" build 2>&1 | tee "${RUNNER_TEMP}/build.log" | grep -E "error:|BUILD" || true
+          APP="${RUNNER_TEMP}/dd/Build/Products/DebugLocal/Nyeko.app"
+          [ -d "$APP" ] || { grep -E "error:" "${RUNNER_TEMP}/build.log" | sort -u | head -30 | sed 's/^/::error::/'; exit 1; }
+          codesign --verify --deep --strict "$APP"
+          codesign -dv "$APP" 2>&1 | grep -E "Authority|TeamIdentifier|Signature" || true
+          echo "APP=$APP" >> "$GITHUB_ENV"
+
+      - name: Make the disk image
+        run: |
+          STAGE="${RUNNER_TEMP}/dmg"
+          mkdir -p "$STAGE" out
+          ditto "$APP" "$STAGE/Nyeko.app"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "Nyeko" -srcfolder "$STAGE" -ov -format UDZO out/Nyeko.dmg
+          SHA=$(shasum -a 256 out/Nyeko.dmg | cut -d' ' -f1)
+          printf '{"versionName":"%s","build":%d,"sha256":"%s","signed":%s}\n' "$VERSION" "$BUILD" "$SHA" "${{ steps.sign.outputs.signed }}" > out/nyeko-mac.json
+          cat out/nyeko-mac.json
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-mac
+          path: out/
+          retention-days: 3
+
+      - name: Forget the signing keychain
+        if: always() && steps.sign.outputs.signed == 'true'
+        run: security delete-keychain "${{ steps.sign.outputs.keychain }}" || true
+
+  windows:
+    needs: number
+    runs-on: windows-latest
+    env:
+      BUILD: ${{ needs.number.outputs.build }}
+      VERSION: ${{ needs.number.outputs.version }}
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            windows/target
+          key: windows-cargo-${{ hashFiles('windows/Cargo.lock') }}
+          restore-keys: windows-cargo-
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `npm run build` (run by tauri as beforeBuildCommand) builds nyeko-hook first, which tauri.conf.json bundles as a
+      # resource; `pack` copies the installer out of target/ under its shipping name.
+      - name: Build and pack the installer
+        shell: bash
+        run: |
+          npm run pack
+          v=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          mkdir -p ../out && cp "release/Nyeko-Windows-${v}-setup.exe" ../out/Nyeko-Windows-setup.exe
+          sha=$(sha256sum ../out/Nyeko-Windows-setup.exe | cut -d' ' -f1)
+          printf '{"versionName":"%s","build":%d,"sha256":"%s"}\n' "$VERSION" "$BUILD" "$sha" > ../out/nyeko-windows.json
+          cat ../out/nyeko-windows.json
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-windows
+          path: out/
+          retention-days: 3
+
+  android:
+    needs: number
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      BUILD: ${{ needs.number.outputs.build }}
+      VERSION: ${{ needs.number.outputs.version }}
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with: { distribution: temurin, java-version: '17' }
+      - uses: actions/setup-node@v7
+        with: { node-version: '22' }
+      - uses: gradle/actions/setup-gradle@v5
+
+      # The same signing key on every build, or Android refuses to install the new APK over the old one. Where it comes
+      # from, first found: the repository secret NYEKO_DEBUG_KEYSTORE (base64 of a keystore, alias androiddebugkey,
+      # passwords "android"), then main's Actions cache. Gradle signs with it explicitly (NYEKO_KEYSTORE, app/build.gradle.kts). A new key
+      # is made only when there is none: the run then says so, and keeps it as a one-day artifact to save as the secret.
+      - name: Signing key, kept between runs
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: nyeko-debug-keystore-v2
+      - name: Signing key from the repository secret, or a new one
+        id: key
+        env:
+          KS: ${{ secrets.NYEKO_DEBUG_KEYSTORE }}
+        run: |
+          mkdir -p ~/.android
+          if [ -n "$KS" ]; then echo "$KS" | base64 -d > ~/.android/debug.keystore; echo "from=secret" >> "$GITHUB_OUTPUT"
+          elif [ -s ~/.android/debug.keystore ]; then echo "from=cache" >> "$GITHUB_OUTPUT"
+          else
+            keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -keypass android \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Nyeko Debug,O=Nyeko,C=AE"
+            echo "from=new" >> "$GITHUB_OUTPUT"
+            echo "::warning::No signing key was kept: a new one was made. Phones with an older Nyeko must uninstall it once. Save this run's nyeko-signing-key artifact as the NYEKO_DEBUG_KEYSTORE secret (base64) so it never changes again."
+          fi
+          echo "NYEKO_KEYSTORE=$HOME/.android/debug.keystore" >> "$GITHUB_ENV"
+          echo "NYEKO_KEYSTORE_PASSWORD=android" >> "$GITHUB_ENV"   # the standard debug-key password, not a secret
+          keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep -i "SHA-256" || true
+      - uses: actions/upload-artifact@v7
+        if: steps.key.outputs.from == 'new'
+        with:
+          name: nyeko-signing-key
+          path: ~/.android/debug.keystore
+          retention-days: 1
+
+      - name: Tests and the APK
+        env:
+          NYEKO_BUILD: ${{ needs.number.outputs.build }}
+        run: ./gradlew testDebugUnitTest assembleDebug --console=plain
+
+      - name: No ads, billing or analytics (condition of the author's permission)
+        run: "! grep -rEi 'admob|play-services-ads|billingclient|firebase-analytics|crashlytics|com.google.android.gms' app/build.gradle.kts"
+
+      - name: The APK and its info
+        run: |
+          # The APK must carry the key above (never one Gradle made up on its own).
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          want=$(keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -v | awk '/SHA256:/ {print $2; exit}' | tr -d ':' | tr 'A-F' 'a-f')
+          got=$("$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | awk '/certificate SHA-256 digest/ {print $NF; exit}')
+          echo "key $want, APK $got"
+          [ -n "$want" ] && [ "$want" = "$got" ] || { echo "::error::The APK is not signed with the kept key."; exit 1; }
+          mkdir -p ../out && cp app/build/outputs/apk/debug/app-debug.apk ../out/Nyeko.apk
+          sha=$(sha256sum ../out/Nyeko.apk | cut -d' ' -f1)
+          printf '{"versionCode":%d,"versionName":"%s","sha256":"%s"}\n' "$((BUILD + 100))" "$VERSION" "$sha" > ../out/nyeko-android.json
+          cat ../out/nyeko-android.json
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-android
+          path: out/
+          retention-days: 3
+
+  publish:
+    needs: [number, mac, windows, android]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.number.outputs.version }}
+      BUILD: ${{ needs.number.outputs.build }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: out
+          merge-multiple: true
+
+      - name: Publish Nyeko ${{ needs.number.outputs.version }}
+        run: |
+          ls -l out
+          signed=$(jq -r .signed out/nyeko-mac.json)
+          mac_note="Signed with your Apple Development certificate: a Mac that runs Nyeko keeps its permissions."
+          [ "$signed" = "true" ] || mac_note="Signed ad hoc (no MAC_CERT_P12 secret): macOS asks for Nyeko's permissions again."
+          cat > notes.md <<EOF
+          Nyeko ${VERSION} (build ${BUILD}), from ${GITHUB_REF_NAME} at ${GITHUB_SHA::7}. Easiest: https://nyeko-phone.pages.dev/download.html
+
+          | | File | |
+          |---|---|---|
+          | Mac | Nyeko.dmg | Open it and drag Nyeko onto Applications. ${mac_note} The first time: right-click Nyeko → Open. |
+          | Windows | Nyeko-Windows-setup.exe | Not code-signed: SmartScreen → More info → Run anyway. |
+          | Android | Nyeko.apk | Installs over the Nyeko you have; the app also updates itself. |
+          | iPhone | — | The web app: https://nyeko-phone.pages.dev (Share → Add to Home Screen). |
+
+          SHA-256: Mac $(jq -r .sha256 out/nyeko-mac.json), Windows $(jq -r .sha256 out/nyeko-windows.json), Android $(jq -r .sha256 out/nyeko-android.json)
+          EOF
+          gh release create "nyeko-${VERSION}" out/Nyeko.dmg out/Nyeko-Windows-setup.exe out/Nyeko.apk \
+            out/nyeko-mac.json out/nyeko-windows.json out/nyeko-android.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Nyeko ${VERSION}" --notes-file notes.md --latest
+
+      # Only the three newest Nyeko releases stay. The old per-app releases go once the live download page serves this
+      # one (a site that was not redeployed yet still looks for them).
+      - name: Tidy older releases
+        run: |
+          R="$GITHUB_REPOSITORY"
+          gh api "repos/$R/releases?per_page=100" --paginate --jq '.[] | select(.tag_name | test("^nyeko-1\\.0\\.[0-9]+$")) | "\(.tag_name | ltrimstr("nyeko-1.0.")) \(.tag_name)"' \
+            | sort -rn | tail -n +4 | while read -r _ tag; do
+                echo "Deleting $tag"; gh release delete "$tag" --repo "$R" --yes --cleanup-tag || true
+              done
+          sleep 150   # the site caches the newest release for two minutes
+          live=$(curl -fsS https://nyeko-phone.pages.dev/downloads/android.json | jq -r '.tag // empty' || true)
+          if [ "$live" = "nyeko-${VERSION}" ]; then
+            gh api "repos/$R/releases?per_page=100" --paginate --jq '.[] | select(.tag_name | test("^nyeko-(android|mac|windows)-v")) | .tag_name' \
+              | while read -r tag; do echo "Deleting $tag"; gh release delete "$tag" --repo "$R" --yes --cleanup-tag || true; done
+          else
+            echo "::notice::The download page still serves ${live:-nothing} (redeploy phone/web): the old per-app releases stay for now."
+          fi
