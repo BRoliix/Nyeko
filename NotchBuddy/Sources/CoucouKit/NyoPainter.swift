@@ -686,7 +686,7 @@ enum NyoStill {
         // Nose, mouth, whiskers
         let nose = CGMutablePath()
         nose.move(to: pt(-4, 11)); nose.addLine(to: pt(4, 11)); nose.addLine(to: pt(0, 15.5)); nose.closeSubpath()
-        ctx.addPath(nose); ctx.setFillColor(nose); ctx.fillPath()
+        ctx.addPath(nose); ctx.setFillColor(NyoStill.nose); ctx.fillPath()
         ctx.addPath(nose); ctx.setStrokeColor(ink); ctx.setLineWidth(max(0.7, 1.6 * u)); ctx.strokePath()
         let mouth = CGMutablePath()
         mouth.move(to: pt(0, 15.5)); mouth.addQuadCurve(to: pt(-7, 18.5), control: pt(-3, 21))
