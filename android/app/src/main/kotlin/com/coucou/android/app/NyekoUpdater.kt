@@ -19,7 +19,7 @@ import org.json.JSONObject
 /**
  * Nyeko keeps itself up to date like the user's other apps: the Actions "Release Nyeko" workflow publishes each build in a GitHub
  * Release (Nyeko.apk and nyeko-android.json: build number, SHA-256), and the Nyeko site (phone/web/_worker.js) serves the
- * newest one at /downloads/android and /downloads/android.json, with a read-only token of its own. The app looks at
+ * newest one at /downloads/android (a redirect to the file on GitHub) and /downloads/android.json. The app looks at
  * most every few hours (when it opens, and from the keep-alive alarm), downloads a newer build, checks its SHA-256 and hands it
  * to Android's own installer.
  *

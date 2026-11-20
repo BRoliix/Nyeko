@@ -4,9 +4,11 @@
 //   /downloads/mac(.json)     the same for the Mac installer (Nyeko.dmg)
 //   /downloads/windows(.json) the same for the Windows installer (Nyeko-Windows-setup.exe)
 // The "Release Nyeko" workflow publishes the three together, as one release (nyeko-1.0.<build>).
-// The repository is public; the site still reads its releases with GITHUB_TOKEN when it is set (a read-only token kept as
-// a Cloudflare secret: npx wrangler pages secret put GITHUB_TOKEN --project-name nyeko-phone), for GitHub's higher rate
-// limit. It is never sent to the browser.
+// The repository is public: the site finds the newest release through GitHub's API and sends the browser straight to
+// the file on GitHub (a redirect: the bytes never pass through this site, so there is no bandwidth limit to hit).
+// GITHUB_TOKEN, when set (a read-only token kept as a Cloudflare secret:
+// npx wrangler pages secret put GITHUB_TOKEN --project-name nyeko-phone), only raises GitHub's rate limit; it is never
+// sent to the browser.
 
 const REPO = "BRoliix/Nyeko";
 /** What each download is: the file, its info file, and how it is served. Older per-app releases (nyeko-android-v…) count too. */
@@ -46,7 +48,10 @@ function json(body, status = 200, extra = {}) {
 
 function gh(env, path, accept = "application/vnd.github+json") {
   return fetch(`https://api.github.com${path}`, {
-    headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: accept, "User-Agent": "nyeko-site", "X-GitHub-Api-Version": "2022-11-28" },
+    headers: {
+      ...(env.GITHUB_TOKEN ? { Authorization: `Bearer ${env.GITHUB_TOKEN}` } : {}),
+      Accept: accept, "User-Agent": "nyeko-site", "X-GitHub-Api-Version": "2022-11-28",
+    },
     redirect: "manual",
   });
 }
@@ -68,29 +73,20 @@ async function latest(env, ctx, kind) {
   const fileAsset = rel.assets.find((a) => a.name === kind.file);
   const infoAsset = rel.assets.find((a) => a.name === kind.info);
   if (!fileAsset || !infoAsset) return null;
-  const meta = await download(env, infoAsset.id).then((r) => r.json());
+  const meta = await fetch(infoAsset.browser_download_url).then((r) => r.json());
   const out = {
     versionCode: meta.versionCode, versionName: meta.versionName, sha256: meta.sha256, signed: meta.signed,
-    size: fileAsset.size, publishedAt: rel.published_at, tag: rel.tag_name, fileId: fileAsset.id,
+    size: fileAsset.size, publishedAt: rel.published_at, tag: rel.tag_name, url: fileAsset.browser_download_url,
   };
   ctx.waitUntil(cache.put(key, new Response(JSON.stringify(out), { headers: { "Cache-Control": "max-age=120" } })));
   return out;
 }
 
-/** A release asset's bytes: GitHub answers with a redirect to signed storage, fetched without the token. */
-async function download(env, id) {
-  const res = await gh(env, `/repos/${env.GITHUB_REPO || REPO}/releases/assets/${id}`, "application/octet-stream");
-  if (res.status >= 300 && res.status < 400 && res.headers.get("Location")) return fetch(res.headers.get("Location"));
-  if (!res.ok) throw new Error(`asset ${res.status}`);
-  return res;
-}
-
 async function info(env, ctx, kind) {
-  if (!env.GITHUB_TOKEN) return json({ error: "not configured" }, 503);
   try {
     const r = await latest(env, ctx, kind);
     if (!r) return json({ error: "no release yet" }, 404);
-    const { fileId, ...pub } = r;
+    const { url, ...pub } = r;
     return json(pub);
   } catch {
     return json({ error: "github unreachable" }, 502);
@@ -98,21 +94,11 @@ async function info(env, ctx, kind) {
 }
 
 async function file(env, ctx, kind, label) {
-  if (!env.GITHUB_TOKEN) return new Response("Downloads are not set up on this site yet.", { status: 503, headers: SECURITY });
   try {
     const r = await latest(env, ctx, kind);
     if (!r) return new Response(`No Nyeko for ${label} build has been published yet.`, { status: 404, headers: SECURITY });
-    const body = await download(env, r.fileId);
-    if (!body.ok || !body.body) return new Response("The download is not available right now.", { status: 502, headers: SECURITY });
-    return new Response(body.body, {
-      headers: {
-        ...SECURITY,
-        "Content-Type": kind.type,
-        "Content-Disposition": `attachment; filename="Nyeko-${label}-${r.versionName || "latest"}.${kind.ext}"`,
-        "Content-Length": String(r.size),
-        "Cache-Control": "no-cache",
-      },
-    });
+    // Straight to GitHub's copy of the newest file.
+    return new Response(null, { status: 302, headers: { ...SECURITY, Location: r.url, "Cache-Control": "no-cache" } });
   } catch {
     return new Response("The download is not available right now.", { status: 502, headers: SECURITY });
   }

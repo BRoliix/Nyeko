@@ -230,8 +230,10 @@ Download it, unzip, run `base64 -i debug.keystore | pbcopy`, and paste it as the
 
 ## The download page
 
-`https://nyeko-phone.pages.dev/download.html` offers each app from the newest release (it needs the `GITHUB_TOKEN`
-Cloudflare secret above), and the Android app updates itself from it.
+`https://nyeko-phone.pages.dev/download.html` offers each app from the newest release of the public BRoliix/Nyeko: the
+site looks the release up and sends the browser straight to the file on GitHub, so its bandwidth never matters (the
+`GITHUB_TOKEN` Cloudflare secret above is optional and only raises GitHub's rate limit). The Android app updates itself
+from it.
 
 ### The Mac installer
 
