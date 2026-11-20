@@ -387,6 +387,10 @@ struct SettingsView: View {
                         .frame(width: 64)
                     Text("s inactive")
                 }
+                #if !APPSTORE
+                Toggle("Keep Nyo beside the notch", isOn: $state.keepNyoBesideNotch)
+                    .help("On a Mac with a notch, the resting island stays a little wider than the notch so Nyo is always in sight. Off: it folds into the notch and Nyo hides behind the camera.")
+                #endif
                 HStack(spacing: 8) {
                     Text("Hide after")
                     TextField("3", value: absenceMinutes, format: .number)

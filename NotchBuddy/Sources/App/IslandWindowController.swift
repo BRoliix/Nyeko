@@ -359,6 +359,9 @@ final class IslandWindowController: NSWindowController {
             self?.fsm.greetComplete()
         }
 
+        // Nyeko: with "Keep Nyo beside the notch", resting never means vanishing into the notch.
+        fsm.keepsPetit = { AppState.shared.staysBesideNotch }
+
         // An approval, or an email prepared by voice, stays open until I click.
         #if !APPSTORE
         // A WhatsApp reply being typed holds the island open, like a voice mail draft.

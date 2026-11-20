@@ -340,6 +340,18 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(autoCloseInterval, forKey: "autoCloseInterval") }
     }
 
+    /// Nyeko: on a Mac with a notch the resting island is exactly the notch, so Nyo disappears behind the camera. With this
+    /// on (the default), Nyo stays beside the notch instead: the island rests in its small (petit) size, also with no session.
+    /// Off: upstream's behaviour (hidden after the absence delay, or as soon as no pill is left). Costs Nyo's idle animation.
+    @Published var keepNyoBesideNotch: Bool = UserDefaults.standard.object(forKey: "nyekoKeepNyoBesideNotch") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(keepNyoBesideNotch, forKey: "nyekoKeepNyoBesideNotch")
+            syncMode()
+        }
+    }
+    /// The setting applies: it is on and the island sits on a notch (without one, the hidden island already shows Nyo).
+    var staysBesideNotch: Bool { keepNyoBesideNotch && hasNotch }
+
     // Absence interval — persisted
     @Published var absenceInterval: TimeInterval = 3 * 60 {
         didSet { UserDefaults.standard.set(absenceInterval, forKey: "absenceInterval") }
@@ -722,8 +734,8 @@ final class AppState: ObservableObject {
     }
 
     func syncMode() {
-        // If no tasks and not expanded/peek, go hidden
-        if tasks.isEmpty && mode == .compact {
+        // If no tasks and not expanded/peek, go hidden (Nyeko: unless Nyo stays beside the notch)
+        if tasks.isEmpty && mode == .compact && !staysBesideNotch {
             mode = .hidden
         } else if !tasks.isEmpty && mode == .hidden && isPresent {
             mode = .compact

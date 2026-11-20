@@ -5132,6 +5132,21 @@
    "ko": "정크",
    "ja": "迷惑メール"
   },
+  "Keep Nyo beside the notch": {
+   "zh-Hans": "让 Nyo 留在刘海旁边",
+   "hi": "Nyo को नॉच के पास रखें",
+   "es": "Mantener a Nyo junto al notch",
+   "ar": "إبقاء Nyo بجانب النتوء",
+   "fr": "Garder Nyo à côté de l’encoche",
+   "bn": "Nyo-কে নচের পাশে রাখুন",
+   "pt-BR": "Manter o Nyo ao lado do notch",
+   "ru": "Оставлять Nyo рядом с вырезом",
+   "id": "Biarkan Nyo di samping notch",
+   "de": "Nyo neben der Notch lassen",
+   "tr": "Nyo'yu çentiğin yanında tut",
+   "ko": "Nyo를 노치 옆에 두기",
+   "ja": "Nyo をノッチの横に表示したままにする"
+  },
   "Keep a history of my coding sessions": {
    "zh-Hans": "保留我的编程会话历史记录",
    "hi": "मेरे कोडिंग सत्रों का इतिहास रखें",
@@ -8071,6 +8086,21 @@
    "tr": "Ollama bağlantısı kesildi.",
    "ko": "Ollama 연결이 끊겼어요.",
    "ja": "Ollama を切断しました。"
+  },
+  "On a Mac with a notch, the resting island stays a little wider than the notch so Nyo is always in sight. Off: it folds into the notch and Nyo hides behind the camera.": {
+   "zh-Hans": "在有刘海的 Mac 上，空闲时灵动岛会比刘海稍宽，让 Nyo 始终可见。关闭：它会收进刘海，Nyo 躲在摄像头后面。",
+   "hi": "नॉच वाले Mac पर, आराम की स्थिति में आइलैंड नॉच से थोड़ा चौड़ा रहता है ताकि Nyo हमेशा दिखे। बंद होने पर: यह नॉच में सिमट जाता है और Nyo कैमरे के पीछे छिप जाता है।",
+   "es": "En un Mac con notch, la isla en reposo queda un poco más ancha que el notch para que Nyo siempre esté a la vista. Desactivado: se pliega dentro del notch y Nyo se esconde tras la cámara.",
+   "ar": "على Mac به نتوء، تبقى الجزيرة في وضع الراحة أعرض قليلًا من النتوء ليظل Nyo ظاهرًا دائمًا. عند الإيقاف: تنطوي داخل النتوء ويختفي Nyo خلف الكاميرا.",
+   "fr": "Sur un Mac avec encoche, l’île au repos reste un peu plus large que l’encoche pour que Nyo soit toujours visible. Désactivé : elle se replie dans l’encoche et Nyo se cache derrière la caméra.",
+   "bn": "নচ থাকা Mac-এ বিশ্রামের সময় আইল্যান্ড নচের চেয়ে একটু চওড়া থাকে, তাই Nyo সবসময় দেখা যায়। বন্ধ থাকলে: এটি নচের ভেতরে গুটিয়ে যায় এবং Nyo ক্যামেরার পেছনে লুকায়।",
+   "pt-BR": "Em um Mac com notch, a ilha em repouso fica um pouco mais larga que o notch para o Nyo estar sempre à vista. Desligado: ela se recolhe no notch e o Nyo some atrás da câmera.",
+   "ru": "На Mac с вырезом остров в покое остаётся чуть шире выреза, чтобы Nyo всегда был виден. Выключено: он сворачивается в вырез, и Nyo прячется за камерой.",
+   "id": "Di Mac dengan notch, pulau saat diam tetap sedikit lebih lebar dari notch sehingga Nyo selalu terlihat. Mati: pulau terlipat ke dalam notch dan Nyo bersembunyi di balik kamera.",
+   "de": "Auf einem Mac mit Notch bleibt die ruhende Insel etwas breiter als die Notch, damit Nyo immer zu sehen ist. Aus: Sie klappt in die Notch und Nyo verschwindet hinter der Kamera.",
+   "tr": "Çentikli bir Mac'te bekleyen ada çentikten biraz geniş kalır, böylece Nyo hep görünür. Kapalı: çentiğin içine katlanır ve Nyo kameranın arkasına saklanır.",
+   "ko": "노치가 있는 Mac에서는 대기 중인 아일랜드가 노치보다 조금 넓게 유지되어 Nyo가 항상 보입니다. 끄면 노치 안으로 접히고 Nyo가 카메라 뒤에 숨습니다.",
+   "ja": "ノッチのある Mac では、待機中のアイランドがノッチより少し広いままになり、Nyo がいつも見えます。オフにすると、ノッチの中に収まり、Nyo はカメラの後ろに隠れます。"
   },
   "On an iPhone: scan with the Camera, tap Copy pairing code, then paste it in Nyeko on the Home Screen.": {
    "zh-Hans": "在 iPhone 上：用相机扫描，轻点“拷贝配对码”，然后粘贴到主屏幕上的 Nyeko 中。",

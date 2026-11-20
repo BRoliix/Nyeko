@@ -120,7 +120,21 @@ enum IslandAutoCloseTests {
         hoveredPetit.mouseLeft()
         try await waitForHidden(hoveredPetit)
 
-        print("Island auto-close: 12 cases passed")
+        // Nyeko: "Keep Nyo beside the notch" keeps the compact island; turning it off lets the next countdown hide it.
+        let besideNotch = IslandStateMachine()
+        var keep = true
+        besideNotch.keepsPetit = { keep }
+        besideNotch.petitToHiddenDelay = 0.05
+        besideNotch.mouseEntered()
+        besideNotch.mouseLeft()
+        try await Task.sleep(for: .milliseconds(300))
+        precondition(besideNotch.state == .petit)
+        keep = false
+        besideNotch.mouseEntered()
+        besideNotch.mouseLeft()
+        try await waitForHidden(besideNotch)
+
+        print("Island auto-close: 13 cases passed")
     }
 
     @MainActor
