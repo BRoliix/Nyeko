@@ -96,8 +96,9 @@ class RustDesktopInteropTest {
         override fun onError(code: String, message: String) { errors.add(code) }
         val caps = LinkedBlockingQueue<Set<String>>()
         val chat = LinkedBlockingQueue<String>()
-        // "prefs" (the outfit) is offered to every app that asks, so the other tests leave it out; it has its own test.
-        override fun onCaps(caps: Set<String>) { this.caps.add(caps - Protocol.CAP_PREFS); allCaps.add(caps) }
+        // "prefs" (the outfit) and Nyeko's "nyeko" are offered to every app that asks, so the other tests leave them out;
+        // the outfit has its own test.
+        override fun onCaps(caps: Set<String>) { this.caps.add(caps - Protocol.CAP_PREFS - Protocol.CAP_NYEKO); allCaps.add(caps - Protocol.CAP_NYEKO) }
         val allCaps = LinkedBlockingQueue<Set<String>>()
         val prefs = LinkedBlockingQueue<String>()
         val serviceCards = LinkedBlockingQueue<List<ServiceCard>>()
