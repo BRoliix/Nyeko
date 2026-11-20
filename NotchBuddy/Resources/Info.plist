@@ -58,6 +58,12 @@
 	<string>Nyeko shows your next event in the island. Your calendar stays on this Mac.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>Nyeko looks up an email address when you ask it, by voice, to prepare an email.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Nyeko shows the files on your Desktop on your paired phone, when you browse them there.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Nyeko shows the files in Documents on your paired phone, when you browse them there.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Nyeko shows the files in Downloads on your paired phone, when you browse them there.</string>
 	<key>NSFocusStatusUsageDescription</key>
 	<string>Nyeko stays quiet about new WhatsApp messages while a Focus is on.</string>
 	<key>NSHighResolutionCapable</key>

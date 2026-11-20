@@ -5,7 +5,7 @@ import { PhoneChannel, b64url, fromB64url, random } from "./relay.js";
 import { parseSetup, sendSetup } from "./setup.js";
 import { drawNyoStill } from "./nyo.js";
 
-const VERSION = "2026-11-20 · nyeko 8";   // shown in Settings: tells which web app the phone runs
+const VERSION = "2026-11-21 · nyeko 9";   // shown in Settings: tells which web app the phone runs
 const STORE = { computers: "nyeko.computers", current: "nyeko.current", cred: "nyeko.faceid", alerts: "nyeko.alerts", oldPairing: "nyeko.pairing" };
 const APPROVAL_TTL = 115_000; // the computer dismisses a request after 115 s
 const app = document.getElementById("app");
@@ -96,6 +96,10 @@ const ICONS = {
   shield: ["M12 3.5l7 3v5.5c0 4.2-3 7.3-7 8.5-4-1.2-7-4.3-7-8.5V6.5z", "M9 12l2.2 2.2L15.5 10"],
   bell: ["M6.5 16.5V11a5.5 5.5 0 0111 0v5.5l1.5 1.5H5z", "M10 20.5a2.2 2.2 0 004 0"],
   battery: ["M3.5 8.5A1.5 1.5 0 015 7h12a1.5 1.5 0 011.5 1.5v7A1.5 1.5 0 0117 17H5a1.5 1.5 0 01-1.5-1.5z", "M21 10.5v3"],
+  folder: ["M3.5 7A1.5 1.5 0 015 5.5h4.2l2 2.2H19A1.5 1.5 0 0120.5 9.2v8.3A1.5 1.5 0 0119 19H5a1.5 1.5 0 01-1.5-1.5z"],
+  file: ["M7 3.5h6.5L18 8v11a1.5 1.5 0 01-1.5 1.5h-9.5A1.5 1.5 0 015.5 19V5A1.5 1.5 0 017 3.5z", "M13.5 3.5V8H18", "M8.5 12.5h7M8.5 16h5"],
+  image: ["M4 6A1.5 1.5 0 015.5 4.5h13A1.5 1.5 0 0120 6v12a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 18z", "M4.5 16l4.5-4.5 3.5 3.5 2.5-2.5 4.5 4.5", "M15 8.5a1.2 1.2 0 110 2.4 1.2 1.2 0 010-2.4z"],
+  up: ["M12 19V6M6 11.5L12 5.5l6 6"],
   play: ["M8 5.5v13l10.5-6.5z"], pause: ["M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"],
   next: ["M5.5 6l8.5 6-8.5 6zM16 6h2.5v12H16z"], prev: ["M18.5 6L10 12l8.5 6zM5.5 6H8v12H5.5z"],
 };
@@ -360,6 +364,29 @@ function onLine(c, m) {
       if (m.os) c.os = m.os;
       break;
     case "apps": c.apps = Array.isArray(m.apps) ? m.apps : []; break;
+    case "folder": {
+      const F = state.files;
+      if (!F || F.comp !== c.id || F.asked !== m.id) break;
+      F.asked = null;
+      if (m.ok) { F.folder = m; F.path = m.path; } else toast(m.note || "That folder can't be shown.");
+      break;
+    }
+    case "file": {
+      const P = state.files?.preview;
+      if (!P || P.id !== m.id) break;
+      if (!m.ok) { state.files.preview = null; toast(m.note || "That file can't be shown."); break; }
+      P.head = m; P.parts = new Array(m.chunks || 0); P.got = 0;
+      if (!m.chunks) P.done = true;
+      break;
+    }
+    case "chunk": {
+      const P = state.files?.preview;
+      if (!P || P.id !== m.id || !P.parts || P.parts[m.i] !== undefined || typeof m.d !== "string") return;
+      P.parts[m.i] = m.d; P.got++;
+      if (P.got < P.parts.length) { if (P.got % 8) return; break; }   // redraw the progress now and then
+      finishPreview(P);
+      break;
+    }
     case "chat":
       if (state.thread?.comp === c.id && state.thread.id === m.session) { state.thread.data = m; state.thread.stick = state.thread.stick ?? true; }
       break;
@@ -499,14 +526,15 @@ async function startSession(form) {
   const L = state.launch;
   const c = comp(L?.comp);
   if (!L || L.starting || !c) return;
-  const project = (c.mac?.projects || []).find((p) => p.id === L.project);
-  if (!project) return toast("Pick a folder first.");
+  const project = L.folder ? null : (c.mac?.projects || []).find((p) => p.id === L.project);
+  if (!project && !L.folder) return toast("Pick a folder first.");
   if (c.status !== "open") return toast(`${c.desktop} is not connected.`);
   if (!(await unlock())) return;
   const prompt = form.querySelector("textarea").value.trim();
   const id = b64url(random(9));
-  if (!send(c, { type: "launch", id, project: project.id, prompt })) return toast(`${c.desktop} is not connected.`);
-  L.starting = { id, name: project.name, at: Date.now(), launched: false };
+  const what = L.folder ? { folder: L.folder.path } : { project: project.id };
+  if (!send(c, { type: "launch", id, ...what, prompt })) return toast(`${c.desktop} is not connected.`);
+  L.starting = { id, name: L.folder ? L.folder.name : project.name, at: Date.now(), launched: false };
   render();
 }
 
@@ -750,6 +778,12 @@ function computerTab() {
       h("button.btn.ghost.danger", { onclick: () => power(c, "shutdown") }, icon("power", 20), "Shut down")),
     h("p.note.center", `Restart and shut down ask for your ${lockName}. Apps with unsaved work can still object.`),
 
+    section("Files"),
+    h("section.card.list", h("button.row-btn", { onclick: () => openFiles(c) },
+      h("span.tile.sun", icon("folder", 20)),
+      h("span.row-main", h("span.row-title", `Browse ${shortName(c)}`), h("span.row-meta", "Look through your folders, preview files, start a session")),
+      icon("chevron", 18))),
+
     m.apps?.length ? [section("Quick launch"),
       h("section.card.launcher", m.apps.map((a) => h("button.app", { onclick: () => { if (ctl("open", { app: a.id })) toast(`Opening ${a.name}…`); } },
         monogram(a.name, "lg"), h("span.app-name", a.name))))] : null,
@@ -890,6 +924,149 @@ function sessionTab() {
   ];
 }
 
+// ── Files on a computer (read-only; docs/PHONE_FILES.md) ─────────────────────────────────────────────────────────
+
+/** Opens the file browser on computer `c`, at `path` (its home folder when empty). `pick`: from New session. */
+async function openFiles(c, { path = "", pick = false } = {}) {
+  if (!c) return;
+  if (c.status !== "open") return toast(`${shortName(c)} is not connected.`);
+  if (!(await unlock())) return;
+  state.files = { comp: c.id, path, folder: null, asked: null, preview: null, pick };
+  state.tab = "files";
+  browse(path);
+}
+
+function browse(path) {
+  const F = state.files;
+  const c = comp(F?.comp);
+  if (!F || !c) return;
+  F.asked = b64url(random(9));
+  F.preview = null;
+  if (!send(c, { type: "browse", id: F.asked, path })) { F.asked = null; toast(`${shortName(c)} is not connected.`); }
+  render();
+  scrollTo(0, 0);
+}
+
+const sepOf = (path) => (path.includes("\\") && !path.includes("/") ? "\\" : "/");
+const joinPath = (dir, name) => dir.replace(/[\\/]+$/, "") + sepOf(dir) + name;
+
+function previewFile(entry) {
+  const F = state.files;
+  const c = comp(F?.comp);
+  if (!F?.folder || !c) return;
+  const id = b64url(random(9));
+  F.preview = { id, name: entry.name, kind: entry.kind, size: entry.size, head: null, parts: null, got: 0, done: false };
+  if (!send(c, { type: "preview", id, path: joinPath(F.folder.path, entry.name) })) { F.preview = null; toast(`${shortName(c)} is not connected.`); }
+  render();
+  scrollTo(0, 0);
+}
+
+function fromBase64(d) {
+  let s = d.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Every chunk is in: the text, or the picture as a data: URL (the page's CSP allows data: images only). */
+function finishPreview(P) {
+  try {
+    const bytes = P.parts.map(fromBase64);
+    const all = new Uint8Array(bytes.reduce((n, b) => n + b.length, 0));
+    let at = 0;
+    for (const b of bytes) { all.set(b, at); at += b.length; }
+    if (P.head.kind === "text") P.text = new TextDecoder("utf-8", { fatal: false }).decode(all);
+    else {
+      let bin = "";
+      for (let i = 0; i < all.length; i += 0x8000) bin += String.fromCharCode(...all.subarray(i, i + 0x8000));
+      P.src = `data:${P.head.mime || "application/octet-stream"};base64,${btoa(bin)}`;
+    }
+  } catch { P.failed = true; }
+  P.parts = null;
+  P.done = true;
+}
+
+const sizeText = (n) => n == null ? "" : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+const dateText = (t) => t ? new Date(t * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short", year: new Date(t * 1000).getFullYear() === new Date().getFullYear() ? undefined : "numeric" }) : "";
+const fileIcon = (e) => e.dir ? ["folder", "sun"] : e.kind === "image" ? ["image", "pink"] : e.kind === "text" ? ["file", "paper"] : ["file", "fur"];
+
+function filesTab() {
+  const F = state.files;
+  const c = comp(F?.comp);
+  if (!F || !c) { state.tab = "mac"; return computerTab(); }
+  const close = () => {
+    if (F.preview) { F.preview = null; render(); return; }
+    state.files = null;
+    state.tab = F.pick ? "launch" : "mac";
+    render();
+  };
+  const bar = (title, sub, right) => h("div.session-bar",
+    h("button.icon-btn", { "aria-label": "Back", onclick: close }, icon("back")),
+    h("div.session-title", h("div.track", title), sub ? h("div.row-meta", sub) : null),
+    right || h("span", { style: "width:44px" }));
+  const reveal = (path) => h("button.icon-btn", { "aria-label": `Show it on ${shortName(c)}`,
+    onclick: () => { if (send(c, { type: "reveal", path })) toast(`Shown on ${shortName(c)}.`); } }, icon("open"));
+
+  // One file
+  const P = F.preview;
+  if (P) {
+    const path = F.folder ? joinPath(F.folder.path, P.name) : "";
+    const head = P.head;
+    const total = head?.chunks || 0;
+    return [
+      bar(P.name, [sizeText(head?.size ?? P.size), shortName(c)].filter(Boolean).join(" · "), reveal(path)),
+      !head ? h("section.card.empty-card", nyo(64, { look: 0.3 }), h("p.sub", "Opening…"))
+      : !P.done ? h("section.card.empty-card", nyo(64, { look: 0.3 }), h("p.sub", `Loading… ${Math.round(100 * P.got / Math.max(1, total))}%`),
+          h("div.meter", { style: "width:70%" }, h("div", { style: `width:${Math.round(100 * P.got / Math.max(1, total))}%` })))
+      : P.failed ? h("section.card.empty-card", h("p.sub", "This file couldn't be shown."))
+      : head.kind === "text" ? [
+          head.truncated ? h("p.note.center", `Showing the first ${sizeText(new TextEncoder().encode(P.text).length)}.`) : null,
+          h("section.card.viewer", h("pre.text-view", P.text || " ")),
+        ]
+      : head.kind === "image" && P.src ? h("section.card.viewer.picture", h("img", { src: P.src, alt: P.name }))
+      : h("section.card.empty-card",
+          h(`span.tile.${fileIcon({ kind: head.kind })[1]}`, icon("file")),
+          h("div.title", P.name),
+          h("p.sub", head.note || `No preview for this kind of file. You can show it on ${shortName(c)}.`),
+          h("button.btn", { onclick: () => { if (send(c, { type: "reveal", path })) toast(`Shown on ${shortName(c)}.`); } }, icon("open", 20), `Show on ${shortName(c)}`)),
+    ];
+  }
+
+  // One folder
+  const f = F.folder;
+  const name = f ? (f.display === "~" ? "Home" : f.display.split(/[\\/]/).filter(Boolean).pop()) : "Files";
+  return [
+    bar(name, f ? `${shortName(c)} · ${f.display}` : shortName(c), f ? reveal(f.path) : null),
+    !f ? h("section.card.empty-card", nyo(64, { look: 0.3 }), h("p.sub", F.asked ? "Opening…" : "Nothing to show."))
+    : [
+        h("section.card.list.files",
+          f.parent ? h("button.row-btn", { onclick: () => browse(f.parent) },
+            h("span.tile.paper", icon("up", 20)), h("span.row-main", h("span.row-title.plain", "Up a folder"))) : null,
+          f.entries.length === 0 ? h("p.empty", "This folder is empty.")
+          : f.entries.map((e) => {
+              const [ic, tone] = fileIcon(e);
+              return h("button.row-btn", { onclick: () => e.dir ? browse(joinPath(f.path, e.name)) : previewFile(e) },
+                h(`span.tile.${tone}`, icon(ic, 20)),
+                h("span.row-main", h("span.row-title.plain", e.name),
+                  h("span.row-meta", e.dir ? (dateText(e.mtime) || "Folder") : [sizeText(e.size), dateText(e.mtime)].filter(Boolean).join(" · "))),
+                e.dir ? icon("chevron", 18) : null);
+            })),
+        f.truncated ? h("p.note.center", "Only the first 300 items are shown.") : null,
+        h("div.file-actions",
+          h("button.btn.primary.block", { onclick: () => {
+            const L = state.launch || (state.launch = { comp: c.id, project: null, starting: null });
+            L.comp = c.id;
+            L.folder = { path: f.path, name: name === "Home" ? "home folder" : name, display: f.display };
+            state.files = null;
+            state.tab = "launch";
+            render();
+          } }, icon("terminal", 20), "Start a session here")),
+      ],
+  ];
+}
+
 function launchTab() {
   const L = state.launch || (state.launch = { comp: cur()?.id, project: null, starting: null });
   const c = comp(L.comp) || cur();
@@ -907,26 +1084,29 @@ function launchTab() {
         h("p.sub", late ? "It is open in a terminal on the computer. It shows on the Now tab once Claude Code is up."
                         : "This opens as soon as Claude Code says hello."))];
   }
+  const pickRow = (on, tone, ic, title, meta, onclick, tail) => h("button.row-btn.pick" + (on ? ".on" : ""),
+    { type: "button", "aria-pressed": on ? "true" : "false", onclick },
+    h(`span.tile.${on ? "tan" : tone}`, icon(ic, 20)),
+    h("span.row-main", h("span.row-title", title), meta ? h("span.row-meta", meta) : null),
+    on ? h("span.check", icon("check", 18)) : tail || null);
   return [
     bar("New session"),
-    picker((x) => { L.comp = x.id; L.project = null; send(x, { type: "status" }); }),
+    picker((x) => { L.comp = x.id; L.project = null; L.folder = null; send(x, { type: "status" }); }),
     !c?.mac ? h("section.card.empty-card", h("p.sub", c?.status === "open" ? "Loading the folders…" : `${c ? shortName(c) : "The computer"} is not connected.`))
-    : projects.length === 0 ? h("section.card.empty-card", h("p.sub",
-        "Nyeko learns your project folders from the sessions you run on the computer. Start one there once, and it shows here."))
     : h("form", { onsubmit: (e) => { e.preventDefault(); startSession(e.target); } },
         section("Folder"),
-        h("section.card.list", projects.map((p) => {
-          const on = p.id === L.project;
-          return h("button.row-btn.pick" + (on ? ".on" : ""), { type: "button", "aria-pressed": on ? "true" : "false",
-            onclick: () => { L.project = p.id; render(); } },
-            h(`span.tile.${on ? "tan" : "paper"}`, icon("terminal", 20)),
-            h("span.row-main", h("span.row-title", p.name), h("span.row-meta", p.where)),
-            on ? h("span.check", icon("check", 18)) : null);
-        })),
+        h("section.card.list",
+          L.folder ? pickRow(true, "sun", "folder", L.folder.name, L.folder.display, () => {}) : null,
+          projects.map((p) => pickRow(!L.folder && p.id === L.project, "paper", "terminal", p.name, p.where,
+            () => { L.folder = null; L.project = p.id; render(); })),
+          pickRow(false, "sun", "folder", L.folder ? "Choose another folder" : "Browse folders",
+            `Any folder in your home folder on ${c ? shortName(c) : "the computer"}`,
+            () => openFiles(c, { path: L.folder?.path || "", pick: true }), icon("chevron", 18))),
+        !projects.length && !L.folder ? h("p.note", "Pick a folder to start in. Folders you start sessions in show here next time.") : null,
         section("What should Claude do?"),
         h("textarea#launch-prompt.field", { placeholder: "Leave empty to just open Claude Code", "aria-label": "What should Claude do?" }),
         h("p.note", "The computer opens a terminal in that folder and starts Claude Code with this. Follow it and talk to it from here."),
-        h("button.btn.primary.block", { type: "submit" }, "Start session")),
+        h("button.btn.primary.block", { type: "submit", disabled: !L.folder && !L.project ? "" : null }, "Start session")),
   ];
 }
 
@@ -1075,11 +1255,11 @@ function render() {
   if (state.androidOffer) view = androidScreen();
   else if (!paired || state.tab === "add") view = pairScreen();
   else {
-    const body = { now: nowTab, mac: computerTab, nyo: nyoTab, settings: settingsTab, session: sessionTab, launch: launchTab }[state.tab]?.() ?? nowTab();
+    const body = { now: nowTab, mac: computerTab, nyo: nyoTab, settings: settingsTab, session: sessionTab, launch: launchTab, files: filesTab }[state.tab]?.() ?? nowTab();
     const main = ["now", "mac", "nyo"].includes(state.tab);
     view = h("main.screen" + (state.tab === "session" ? ".chatting" : "") + (state.tab === "nyo" ? ".chatting" : ""), main ? header() : null, body);
   }
-  app.replaceChildren(view, paired && !state.androidOffer && !["settings", "session", "launch", "add"].includes(state.tab) ? tabs() : "",
+  app.replaceChildren(view, paired && !state.androidOffer && !["settings", "session", "launch", "add", "files"].includes(state.tab) ? tabs() : "",
     state.toast ? h("div.toast", { role: "status" }, state.toast) : "");
 
   const ask = document.getElementById("ask");

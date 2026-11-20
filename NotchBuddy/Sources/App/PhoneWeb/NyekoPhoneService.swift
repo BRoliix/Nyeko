@@ -442,6 +442,12 @@ final class NyekoPhoneService: ObservableObject {
 
     // MARK: From the phone
 
+    /// Lines made off the main thread (file listings and previews), in order.
+    func sendLines(_ lines: [String], to kind: NyekoPhoneKind) {
+        guard let client = clients[kind] else { return }
+        for line in lines { client.sendNyekoLine(line) }
+    }
+
     private func nyeko(_ data: Data, from kind: NyekoPhoneKind) {
         let client = clients[kind]
         guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
@@ -480,7 +486,38 @@ final class NyekoPhoneService: ObservableObject {
             let id = object["id"] as? String ?? ""
             let project = object["project"] as? String ?? ""
             let prompt = String((object["prompt"] as? String ?? "").prefix(8000))
-            launch(id: id, project: project, prompt: prompt, from: kind)
+            launch(id: id, project: project, folder: object["folder"] as? String, prompt: prompt, from: kind)
+        case "browse":
+            // A folder in the home folder, read-only (NyekoFiles; docs/PHONE_FILES.md). Read off the main thread; only
+            // the encoded line crosses back.
+            let id = String((object["id"] as? String ?? "").prefix(64))
+            let asked = object["path"] as? String
+            Task.detached {
+                var out: [String: Any] = ["type": "folder", "id": id]
+                if let url = NyekoFiles.resolve(asked) { out.merge(NyekoFiles.listing(url)) { _, new in new } }
+                else { out["ok"] = false; out["note"] = "Nyeko only shows what is in your home folder." }
+                let line = AndroidLinkProtocol.json(out)
+                await NyekoPhoneService.shared.sendLines([line], to: kind)
+            }
+        case "preview":
+            let id = String((object["id"] as? String ?? "").prefix(64))
+            let asked = object["path"] as? String
+            Task.detached {
+                var lines: [String] = []
+                if let url = NyekoFiles.resolve(asked), url != NyekoFiles.home {
+                    let (header, chunks) = NyekoFiles.preview(url)
+                    lines.append(AndroidLinkProtocol.json(["type": "file", "id": id].merging(header) { _, new in new }))
+                    for (i, d) in chunks.enumerated() { lines.append(AndroidLinkProtocol.json(["type": "chunk", "id": id, "i": i, "d": d])) }
+                } else {
+                    lines.append(AndroidLinkProtocol.json(["type": "file", "id": id, "ok": false, "note": "Nyeko only shows what is in your home folder."]))
+                }
+                await NyekoPhoneService.shared.sendLines(lines, to: kind)
+            }
+        case "reveal":
+            // Shows a file or folder in the Finder: selected, never opened.
+            if let url = NyekoFiles.resolve(object["path"] as? String) {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
         case "pushSub":
             guard let endpoint = object["endpoint"] as? String, let url = URL(string: endpoint),
                   url.scheme == "https", WebPush.allowedHost(url.host ?? "") else {
@@ -548,15 +585,18 @@ final class NyekoPhoneService: ObservableObject {
 
     /// Starts Claude Code in one of the launcher's recent folders, like the notch's New session card. Then waits for the
     /// session's first hook event (up to a minute) and tells the phone which session it is, so it can open it.
-    private func launch(id: String, project: String, prompt: String, from kind: NyekoPhoneKind) {
+    private func launch(id: String, project: String, folder asked: String?, prompt: String, from kind: NyekoPhoneKind) {
         let launcher = SessionLauncher.shared
         let client = clients[kind]
         func answer(_ fields: [String: Any]) {
             let base: [String: Any] = ["type": "launched", "id": id]
             client?.sendNyeko(base.merging(fields) { _, new in new })
         }
-        guard let folder = launcher.projects.first(where: { Self.projectId($0) == project }) else {
-            return answer(["ok": false, "note": String(localized: "That folder isn't in Nyeko's recent projects any more.")])
+        // A recent project by its id, or (Nyeko) a folder the phone browsed to, inside the home folder.
+        let picked = asked.flatMap { NyekoFiles.launchFolder($0) } ?? launcher.projects.first(where: { Self.projectId($0) == project })
+        guard let folder = picked else {
+            return answer(["ok": false, "note": asked == nil ? String(localized: "That folder isn't in Nyeko's recent projects any more.")
+                                                             : "Nyeko only starts sessions in a folder inside your home folder."])
         }
         let before = Set(AppState.shared.liveSessions.map(\.id))
         launcher.choose(folder)

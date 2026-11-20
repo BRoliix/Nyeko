@@ -29,7 +29,7 @@ use super::hub::Out;
 pub const PHONE_PREFIX: &str = "The user sent this from their phone:";
 
 /// The phone's messages handled here.
-const TYPES: &[&str] = &["status", "control", "ask", "open", "close", "say", "unqueue", "launch", "listApps", "pushSub"];
+const TYPES: &[&str] = &["status", "control", "ask", "open", "close", "say", "unqueue", "launch", "listApps", "pushSub", "browse", "preview", "reveal"];
 
 pub fn handles(t: &str) -> bool {
     TYPES.contains(&t)
@@ -819,8 +819,17 @@ impl Conn {
                 let id = text("id", 64);
                 let project = text("project", 64);
                 let prompt = cut(msg["prompt"].as_str().unwrap_or(""), 8000);
-                let Some(folder) = projects().into_iter().find(|p| short_id(p) == project) else {
-                    let _ = self.tx.try_send(line(json!({ "type": "launched", "id": id, "ok": false, "note": "Nyeko only starts sessions in folders it has seen Claude Code work in." })));
+                // A recent project by its id, or (Nyeko) a folder the phone browsed to, inside the home folder (files.rs).
+                let browsed = msg["folder"].as_str().map(super::files::launch_folder);
+                let from_phone = browsed.is_some();
+                let picked = match browsed {
+                    Some(f) => f,
+                    None => projects().into_iter().find(|p| short_id(p) == project),
+                };
+                let Some(folder) = picked else {
+                    let note = if from_phone { "Nyeko only starts sessions in a folder inside your home folder." }
+                               else { "Nyeko only starts sessions in folders it has seen Claude Code work in." };
+                    let _ = self.tx.try_send(line(json!({ "type": "launched", "id": id, "ok": false, "note": note })));
                     return;
                 };
                 let tx = self.tx.clone();
@@ -833,6 +842,52 @@ impl Conn {
                     let note = if ok { "" } else { "No terminal could be opened in that folder." };
                     let _ = tx.try_send(line(json!({ "type": "launched", "id": id, "ok": ok, "note": note })));
                 });
+            }
+            "browse" => {
+                // A folder in the home folder, read-only (files.rs; docs/PHONE_FILES.md).
+                let id = text("id", 64);
+                let asked = msg["path"].as_str().map(str::to_string);
+                let tx = self.tx.clone();
+                tokio::spawn(async move {
+                    let mut out = tokio::task::spawn_blocking(move || match super::files::resolve(asked.as_deref()) {
+                        Some(dir) => super::files::listing(&dir),
+                        None => json!({ "ok": false, "note": "Nyeko only shows what is in your home folder." }),
+                    }).await.unwrap_or_else(|_| json!({ "ok": false }));
+                    out["type"] = json!("folder");
+                    out["id"] = json!(id);
+                    let _ = tx.send(line(out)).await;
+                });
+            }
+            "preview" => {
+                let id = text("id", 64);
+                let asked = msg["path"].as_str().map(str::to_string);
+                let tx = self.tx.clone();
+                tokio::spawn(async move {
+                    let (mut header, chunks) = tokio::task::spawn_blocking(move || {
+                        let home = super::files::home();
+                        match super::files::resolve(asked.as_deref()) {
+                            Some(p) if Some(&p) != home.as_ref() => super::files::preview(&p),
+                            _ => (json!({ "ok": false, "note": "Nyeko only shows what is in your home folder." }), vec![]),
+                        }
+                    }).await.unwrap_or_else(|_| (json!({ "ok": false }), vec![]));
+                    header["type"] = json!("file");
+                    header["id"] = json!(id);
+                    if tx.send(line(header)).await.is_err() {
+                        return;
+                    }
+                    // In order, waiting for room: a big image is about a hundred lines.
+                    for (i, d) in chunks.into_iter().enumerate() {
+                        if tx.send(line(json!({ "type": "chunk", "id": id, "i": i, "d": d }))).await.is_err() {
+                            return;
+                        }
+                    }
+                });
+            }
+            "reveal" => {
+                // Shows a file or folder in the file manager: selected, never opened.
+                if let Some(p) = super::files::resolve(msg["path"].as_str()) {
+                    tokio::task::spawn_blocking(move || reveal(&p));
+                }
             }
             _ => {} // pushSub: this computer sends no Web Push
         }
@@ -867,6 +922,21 @@ impl Conn {
 }
 
 // ── The operating system ───────────────────────────────────────────────────────────────────────────────────────────
+
+/// Shows a file or folder in Explorer (selected) or the Linux file manager (its folder).
+fn reveal(path: &std::path::Path) {
+    #[cfg(windows)]
+    {
+        let mut cmd = std::process::Command::new("explorer.exe");
+        if path.is_dir() { cmd.arg(path); } else { cmd.arg(format!("/select,{}", path.display())); }
+        let _ = cmd.spawn();
+    }
+    #[cfg(not(windows))]
+    {
+        let dir = if path.is_dir() { path } else { path.parent().unwrap_or(path) };
+        let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
+    }
+}
 
 /// A command that must not flash a window, run to its end (a few seconds at most for these).
 fn run(program: &str, args: &[&str]) -> bool {

@@ -375,7 +375,11 @@ final class NyekoRelayClient: NSObject, URLSessionWebSocketDelegate, @unchecked 
 
     /// A Nyeko line (status, reply) to the phone, only when it said a valid hello.
     func sendNyeko(_ object: [String: Any]) {
-        let line = AndroidLinkProtocol.json(object)
+        sendNyekoLine(AndroidLinkProtocol.json(object))
+    }
+
+    /// A line already encoded (made off the main thread, as file previews are).
+    func sendNyekoLine(_ line: String) {
         queue.async {
             guard self.conversation?.authenticated == true else { return }
             self.sendLine(line)
@@ -484,7 +488,7 @@ final class NyekoWebConversation: @unchecked Sendable {
         case .bye:
             end()
         case .other(let type):
-            guard ["control", "ask", "pushSub", "status", "open", "close", "say", "unqueue", "launch", "listApps"].contains(type),
+            guard ["control", "ask", "pushSub", "status", "open", "close", "say", "unqueue", "launch", "listApps", "browse", "preview", "reveal"].contains(type),
                   let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return }
             onNyeko(object)
         case .hello:

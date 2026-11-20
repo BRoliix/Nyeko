@@ -18,6 +18,7 @@ mod admission;
 mod chat;
 mod chat_backend;
 mod discovery;
+mod files;
 mod hub;
 #[cfg(test)]
 mod interop;
