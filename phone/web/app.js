@@ -3,11 +3,13 @@
 // Untrusted text (commands, session lines, Nyo's replies) is only ever set as text, never as HTML.
 import { PhoneChannel, b64url, fromB64url, random } from "./relay.js";
 import { parseSetup, sendSetup } from "./setup.js";
+import { drawNyoStill } from "./nyo.js";
 
-const VERSION = "2026-11-20 · nyeko 7";   // shown in Settings: tells which web app the phone runs
+const VERSION = "2026-11-20 · nyeko 8";   // shown in Settings: tells which web app the phone runs
 const STORE = { computers: "nyeko.computers", current: "nyeko.current", cred: "nyeko.faceid", alerts: "nyeko.alerts", oldPairing: "nyeko.pairing" };
 const APPROVAL_TTL = 115_000; // the computer dismisses a request after 115 s
 const app = document.getElementById("app");
+const PREVIEW = globalThis.NYEKO_PREVIEW || null;
 
 /** One paired computer: its pairing (kept in this phone's storage) and what it last said (in memory). */
 function newComputer(p) {
@@ -54,7 +56,7 @@ function h(spec, attrs, ...children) {
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v == null || v === false) continue;
     if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
-    else if (k === "style") el.setAttribute("style", v);
+    else if (k === "style") el.style.cssText = v;   // CSSOM: allowed by the page's style-src 'self'
     else el.setAttribute(k, v === true ? "" : v);
   }
   for (const c of children.flat(Infinity)) {
@@ -64,23 +66,81 @@ function h(spec, attrs, ...children) {
   return el;
 }
 
-const icon = (name) => {
-  const paths = {
-    play: "M8 5v14l11-7z", pause: "M7 5h4v14H7zM13 5h4v14h-4z", next: "M6 6l8.5 6L6 18zM16 6h2v12h-2z",
-    prev: "M18 6l-8.5 6L18 18zM6 6h2v12H6z", gear: "M12 8a4 4 0 100 8 4 4 0 000-8zm8.9 3H19a7 7 0 00-1-2.4l1.4-1.4-1.6-1.6L16.4 7A7 7 0 0014 6V4h-2.1v2a7 7 0 00-2.4 1L8.1 5.6 6.5 7.2 7.9 8.6A7 7 0 007 11H5v2h2a7 7 0 001 2.4l-1.4 1.4 1.6 1.6 1.4-1.4a7 7 0 002.4 1V20h2v-2a7 7 0 002.4-1l1.4 1.4 1.6-1.6-1.4-1.4A7 7 0 0019 13h1.9z",
-    note: "M9 18V6l10-2v12M9 18a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zm10-2a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z",
-  };
+// Line icons, drawn for Nyeko (24-unit grid, 2-unit round strokes; the media keys are filled). No icon font, no emoji.
+const ICONS = {
+  gear: ["M12 9.2a2.8 2.8 0 100 5.6 2.8 2.8 0 000-5.6z", "M19.4 13.5l1.6 1.2-1.9 3.3-1.9-.7a7.5 7.5 0 01-2.1 1.2l-.3 2H11l-.3-2a7.5 7.5 0 01-2.1-1.2l-1.9.7-1.9-3.3 1.6-1.2a7.6 7.6 0 010-2.9L4.8 9.4l1.9-3.3 1.9.7a7.5 7.5 0 012.1-1.2L11 3.5h3.8l.3 2.1a7.5 7.5 0 012.1 1.2l1.9-.7 1.9 3.3-1.6 1.2a7.6 7.6 0 010 2.9z"],
+  back: ["M15 5l-7 7 7 7"],
+  chevron: ["M9 6l6 6-6 6"],
+  down: ["M6 9l6 6 6-6"],
+  plus: ["M12 5v14M5 12h14"],
+  search: ["M10.5 4a6.5 6.5 0 110 13 6.5 6.5 0 010-13zM15.5 15.5L20 20"],
+  send: ["M12 19V6M6 11.5L12 5.5l6 6"],
+  now: ["M3 12h4l2.5-6 5 12 2.5-6h4"],
+  laptop: ["M5 6.5A1.5 1.5 0 016.5 5h11A1.5 1.5 0 0119 6.5V15H5z", "M2.5 18.5h19"],
+  desktop: ["M4 5.5A1.5 1.5 0 015.5 4h13A1.5 1.5 0 0120 5.5v9a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 14.5z", "M9 20h6M12 16v4"],
+  cat: ["M5 9.5L4.5 3.5l5 3.2a8 8 0 015 0l5-3.2-.5 6A7.5 7.5 0 0112 20.5 7.5 7.5 0 015 9.5z", "M9.3 12.2v.6M14.7 12.2v.6", "M11 15.5l1 .8 1-.8"],
+  terminal: ["M4 6.5A1.5 1.5 0 015.5 5h13A1.5 1.5 0 0120 6.5v11a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 17.5z", "M7.5 9.5l3 2.5-3 2.5M12.5 15h4"],
+  volume: ["M4 9.5h3.5L12 5.5v13l-4.5-4H4z", "M15.5 9a4 4 0 010 6M18 6.5a7.5 7.5 0 010 11"],
+  mute: ["M4 9.5h3.5L12 5.5v13l-4.5-4H4z", "M16 9.5l5 5M21 9.5l-5 5"],
+  lock: ["M6 11h12v9H6z", "M8.5 11V8a3.5 3.5 0 017 0v3"],
+  moon: ["M19.5 14.5A7.5 7.5 0 019.5 4.5a7.5 7.5 0 1010 10z"],
+  screenOff: ["M4 5.5A1.5 1.5 0 015.5 4h13A1.5 1.5 0 0120 5.5v9a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 14.5z", "M9 20h6", "M9.5 8.5l5 5M14.5 8.5l-5 5"],
+  restart: ["M4.5 12a7.5 7.5 0 1 0 2.2-5.3", "M4.5 4.5v4h4"],
+  power: ["M12 3.5v8", "M7 6.3a7.5 7.5 0 1010 0"],
+  camera: ["M4 8.5A1.5 1.5 0 015.5 7h2.3L9.5 4.5h5L16.2 7h2.3A1.5 1.5 0 0120 8.5v9a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 17.5z", "M12 9.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z"],
+  timer: ["M12 7.5a6.5 6.5 0 110 13 6.5 6.5 0 010-13z", "M12 10.5V14l2 1.5", "M10 3.5h4"],
+  mic: ["M12 3.5a2.5 2.5 0 012.5 2.5v5a2.5 2.5 0 01-5 0V6A2.5 2.5 0 0112 3.5z", "M6.5 11a5.5 5.5 0 0011 0M12 16.5v4"],
+  calendar: ["M4.5 6.5A1.5 1.5 0 016 5h12a1.5 1.5 0 011.5 1.5v12A1.5 1.5 0 0118 20H6a1.5 1.5 0 01-1.5-1.5z", "M4.5 10h15M8.5 3.5v3M15.5 3.5v3"],
+  open: ["M14 4.5h5.5V10", "M19.5 4.5L11 13", "M18 14v4.5a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 014 18.5v-11A1.5 1.5 0 015.5 6H10"],
+  check: ["M5 12.5l4.5 4.5L19 7.5"],
+  shield: ["M12 3.5l7 3v5.5c0 4.2-3 7.3-7 8.5-4-1.2-7-4.3-7-8.5V6.5z", "M9 12l2.2 2.2L15.5 10"],
+  bell: ["M6.5 16.5V11a5.5 5.5 0 0111 0v5.5l1.5 1.5H5z", "M10 20.5a2.2 2.2 0 004 0"],
+  battery: ["M3.5 8.5A1.5 1.5 0 015 7h12a1.5 1.5 0 011.5 1.5v7A1.5 1.5 0 0117 17H5a1.5 1.5 0 01-1.5-1.5z", "M21 10.5v3"],
+  play: ["M8 5.5v13l10.5-6.5z"], pause: ["M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"],
+  next: ["M5.5 6l8.5 6-8.5 6zM16 6h2.5v12H16z"], prev: ["M18.5 6L10 12l8.5 6zM5.5 6H8v12H5.5z"],
+};
+const FILLED = new Set(["play", "pause", "next", "prev"]);
+
+function icon(name, size = 22) {
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", "24"); svg.setAttribute("height", "24");
-  svg.setAttribute("aria-hidden", "true");
-  const p = document.createElementNS(ns, "path");
-  p.setAttribute("d", paths[name]);
-  if (name === "note") { p.setAttribute("fill", "none"); p.setAttribute("stroke", "currentColor"); p.setAttribute("stroke-width", "2"); }
-  else p.setAttribute("fill", "currentColor");
-  svg.append(p);
+  svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("width", size); svg.setAttribute("height", size);
+  svg.setAttribute("aria-hidden", "true"); svg.setAttribute("class", "ic");
+  for (const d of ICONS[name] || []) {
+    const p = document.createElementNS(ns, "path");
+    p.setAttribute("d", d);
+    if (FILLED.has(name)) p.setAttribute("fill", "currentColor");
+    else { p.setAttribute("fill", "none"); p.setAttribute("stroke", "currentColor"); p.setAttribute("stroke-width", "2");
+      p.setAttribute("stroke-linecap", "round"); p.setAttribute("stroke-linejoin", "round"); }
+    svg.append(p);
+  }
   return svg;
-};
+}
+
+/** Nyo himself, drawn by the same painter as the Mac, Windows and Android (nyo.js, built from windows/src/mochi/nyo.ts). */
+function nyo(size, { eye = "open", look = 0, cls = "" } = {}) {
+  const c = document.createElement("canvas");
+  const dpr = Math.min(3, devicePixelRatio || 1);
+  c.width = c.height = Math.round(size * dpr);
+  c.style.width = c.style.height = size + "px";
+  c.className = "nyo" + (cls ? " " + cls : "");
+  c.setAttribute("aria-hidden", "true");
+  const x = c.getContext("2d");
+  if (x) {
+    const u = (size * dpr) / 100;          // the 120-unit sheet: Nyo spans about 90 × 92 units
+    x.translate((size * dpr) / 2, 61 * u);
+    drawNyoStill(x, { rx: 38 * u, ry: 35 * u, eye, lookX: look, lookY: 0 });
+  }
+  return c;
+}
+
+/** A rounded tile with a letter, coloured from the name (apps, sessions without an icon of their own). */
+const TINTS = ["tan", "mint", "pink", "sun", "fur"];
+function tint(name) { let n = 0; for (const ch of String(name)) n = (n * 31 + ch.codePointAt(0)) >>> 0; return TINTS[n % TINTS.length]; }
+function monogram(name, size = "") {
+  const letter = (String(name).replace(/^[^A-Za-z0-9]+/, "")[0] || "·").toUpperCase();
+  return h(`span.mono-tile.${tint(name)}${size ? "." + size : ""}`, { "aria-hidden": "true" }, letter);
+}
 
 function toast(text, ms = 2600) {
   state.toast = text;
@@ -512,28 +572,45 @@ const dotOf = (c) => ({ open: "on", waiting: "wait", connecting: "wait" }[c.stat
 const statusWord = (c) => ({ open: "Connected", waiting: "Waiting for it", connecting: "Connecting…",
   unpaired: "Paired again on the computer: add its new code" }[c.status] || "Offline");
 
+/** "Neko's MacBook Pro · greenhawk_nyek" → { device, account }. Two accounts on one Mac share the device part. */
+function nameParts(c) {
+  const [device, ...rest] = String(c.desktop).split(" · ");
+  return { device, account: rest.join(" · ") };
+}
+/** The shortest name that still tells this computer apart from the others on the phone. */
+function shortName(c) {
+  const { device, account } = nameParts(c);
+  if (!account) return device;
+  const twins = state.computers.filter((x) => nameParts(x).device === device).length > 1;
+  return twins ? account : device;
+}
+const osIcon = (c) => (c.os === "windows" || c.os === "linux" ? "desktop" : "laptop");
+
+const pill = (s) => h("span.pill." + sessionClass(s), sessionClass(s) === "work" ? h("span.dots", h("i"), h("i"), h("i")) : h("i.pip"), sessionLabel(s));
+const section = (title, ...rest) => h("div.section-head", h("h2", title), ...rest);
+
 function header() {
   const n = state.computers.length;
   const on = state.computers.filter((c) => c.status === "open").length;
   const one = state.computers[0];
   const [dot, text] = n === 1 ? [dotOf(one), one.status === "open" ? one.desktop : statusWord(one)]
-    : [on === n ? "on" : on ? "wait" : "off", `${on} of ${n} computers connected`];
+    : [on === n ? "on" : on ? "wait" : "off", on === n ? `All ${n} computers connected` : `${on} of ${n} computers connected`];
+  const busy = state.computers.some((c) => c.approval || c.question);
   return h("header.top",
-    h("img.cat", { src: "/icons/icon-192.png", alt: "" }),
-    h("button.grow", { style: "background:none;border:none;text-align:left;padding:0;cursor:pointer", "aria-label": "Your computers",
-      onclick: () => { state.tab = "settings"; render(); } },
-      h("h1", "Nyeko"), h("span.status", h("span.dot." + dot), text)),
-    h("button.btn.round", { "aria-label": "Settings", onclick: () => { state.tab = "settings"; render(); } }, icon("gear")));
+    h("button.brand", { "aria-label": "Your computers", onclick: () => { state.tab = "settings"; render(); } },
+      nyo(46, { eye: on ? "open" : "content", look: busy ? 0.4 : 0 }),
+      h("span.brand-text", h("span.wordmark", "Nyeko"), h("span.status", h("span.dot." + dot), text))),
+    h("button.icon-btn", { "aria-label": "Settings", onclick: () => { state.tab = "settings"; render(); } }, icon("gear")));
 }
 
-/** Chips to pick the computer a tab talks to (only with more than one). */
+/** The computer a tab talks to (only with more than one): a row of chips that scrolls sideways. */
 function picker(onPick) {
   if (!many()) return null;
   const c0 = cur();
-  return h("div.opts", { style: "margin:0 0 6px" }, state.computers.map((c) =>
-    h("button.opt" + (c === c0 ? ".on" : ""), { "aria-pressed": c === c0 ? "true" : "false",
+  return h("div.switcher", { role: "tablist", "aria-label": "Computer" }, state.computers.map((c) =>
+    h("button.switch" + (c === c0 ? ".on" : ""), { role: "tab", "aria-selected": c === c0 ? "true" : "false",
       onclick: () => { state.current = c.id; saveComputers(); onPick?.(c); render(); } },
-      h("span.dot." + dotOf(c), { style: "display:inline-block;margin-right:6px" }), c.desktop)));
+      h("span.dot." + dotOf(c)), shortName(c))));
 }
 
 function approvalCard(c) {
@@ -541,64 +618,76 @@ function approvalCard(c) {
   if (!a) return null;
   const left = Math.max(0, Math.ceil((a.at + APPROVAL_TTL - Date.now()) / 1000));
   if (left === 0) { c.approval = null; return null; }
-  return h("section.card.alert", { "aria-label": "Permission request" },
-    h("div.row", h("div.grow", h("div.title", "Claude needs you"), h("div.sub", `Wants to use ${a.tool}${many() ? ` · on ${c.desktop}` : ""}`)),
-      h("span.timer.small.muted", `${left}s`)),
-    h("p.mono", a.command),
-    a.truncated ? h("p.small.muted", "The command is longer than shown: allow it on the computer, or deny it here.") : null,
-    a.sent ? h("p.small.muted", "Sent. Waiting for the computer…")
-      : h("div.row",
-          h("button.btn.grow", { onclick: () => decide(c, false) }, "Deny"),
-          a.truncated ? null : h("button.btn.primary.grow", { onclick: () => decide(c, true) }, "Allow")));
+  return h("section.card.urgent", { "aria-label": "Permission request" },
+    h("div.urgent-head", h("span", "Claude needs your OK"), h("span.countdown", `${left}s`)),
+    h("div.card-body",
+      h("div.sub", `${a.tool}${many() ? ` · ${shortName(c)}` : ""}`),
+      h("pre.code", a.command),
+      a.truncated ? h("p.note", "The command is longer than shown: allow it on the computer, or deny it here.") : null,
+      a.sent ? h("p.note", "Sent. Waiting for the computer…")
+        : h("div.pair-btns",
+            h("button.btn.ghost", { onclick: () => decide(c, false) }, "Deny"),
+            a.truncated ? null : h("button.btn.go", { onclick: () => decide(c, true) }, icon("shield", 20), "Allow")),
+      a.sent ? null : h("p.note", `Allow asks for your ${lockName}. Deny never does.`)));
 }
 
 function questionCard(c) {
   const q = c.question;
   if (!q) return null;
-  return h("section.card.alert", { "aria-label": "Question from Claude" },
-    h("div.title", many() ? `Claude asks · on ${c.desktop}` : "Claude asks"),
-    q.questions.map((item, i) => h("div",
-      h("p", { style: "font-weight:700;margin:12px 0 4px" }, item.question),
-      h("div.opts", item.options.map((o) => {
-        const on = q.picks[i].includes(o.label);
-        return h("button.opt" + (on ? ".on" : ""), { "aria-pressed": on ? "true" : "false", onclick: () => {
-          if (item.multiSelect) q.picks[i] = on ? q.picks[i].filter((l) => l !== o.label) : [...q.picks[i], o.label];
-          else q.picks[i] = [o.label];
-          render();
-        } }, o.label, o.description ? h("small", o.description) : null);
-      })))),
-    q.sent ? h("p.small.muted", "Sent. Waiting for the computer…")
-      : h("button.btn.primary.block", { onclick: () => answer(c) }, "Send answer"));
+  return h("section.card.urgent", { "aria-label": "Question from Claude" },
+    h("div.urgent-head", h("span", many() ? `Claude asks · ${shortName(c)}` : "Claude asks")),
+    h("div.card-body",
+      q.questions.map((item, i) => h("div.question",
+        h("p.q", item.question),
+        h("div.opts", item.options.map((o) => {
+          const on = q.picks[i].includes(o.label);
+          return h("button.opt" + (on ? ".on" : ""), { "aria-pressed": on ? "true" : "false", onclick: () => {
+            if (item.multiSelect) q.picks[i] = on ? q.picks[i].filter((l) => l !== o.label) : [...q.picks[i], o.label];
+            else q.picks[i] = [o.label];
+            render();
+          } }, h("span.opt-label", o.label), o.description ? h("small", o.description) : null);
+        })))),
+      q.sent ? h("p.note", "Sent. Waiting for the computer…")
+        : h("button.btn.primary.block", { onclick: () => answer(c) }, "Send answer")));
+}
+
+function sessionRow(c, x) {
+  const host = String(x.statusText || "").split(" · ")[0];
+  const meta = [many() ? shortName(c) : null, x.statusText || null].filter(Boolean).join(" · ");
+  return h("button.row-btn.session", { "aria-label": `${x.agent}${many() ? ` on ${c.desktop}` : ""}: open the session`,
+      onclick: () => openSession(c, x) },
+    h(`span.tile.${tint(host || x.agent)}`, icon("terminal", 22)),
+    h("span.row-main", h("span.row-title", x.agent), meta ? h("span.row-meta", meta) : null),
+    pill(x.state));
 }
 
 function nowTab() {
   const rows = state.computers.flatMap((c) => c.sessions.map((x) => ({ c, x })));
+  const order = { need: 0, work: 1, done: 2, idle: 3 };
+  rows.sort((a, b) => order[sessionClass(a.x.state)] - order[sessionClass(b.x.state)]);
   const u = cur()?.usage?.claude;
   return [
     state.computers.map((c) => [approvalCard(c), questionCard(c)]),
     // Android in the browser: Nyo on the screen and the camera-hole island need the app (a web page can't draw over apps).
-    !isIOS && !load("nyeko.appHint.hidden") ? h("section.card.alert",
-      h("div.title", "Want Nyo on your screen?"),
-      h("p.sub", "Nyo floating over your other apps and the island from the camera hole come with the Nyeko app for Android."),
-      h("div.row", { style: "gap:10px;flex-wrap:wrap" },
-        h("a.btn.primary", { href: "/download.html", style: "text-decoration:none;color:inherit" }, "Get the app"),
-        h("button.btn", { onclick: () => { save("nyeko.appHint.hidden", true); render(); } }, "Not now"))) : null,
-    h("h2", many() ? "Coding sessions · all computers" : "Coding sessions"),
-    h("section.card", rows.length === 0 ? h("p.empty", "No coding session is running.") :
-      h("div.list", rows.map(({ c, x }) => h("button.item", {
-          style: "display:block;width:100%;text-align:left;background:none;border:none;padding:12px 0;cursor:pointer",
-          "aria-label": `${x.agent}${many() ? ` on ${c.desktop}` : ""}: open the session`,
-          onclick: () => openSession(c, x),
-        },
-        h("div.row", h("div.grow", h("div.title", x.agent),
-            h("div.sub", [many() ? c.desktop : null, x.statusText || null].filter(Boolean).join(" · "))),
-          h("span.chip." + sessionClass(x.state), h("i"), sessionLabel(x.state))))))),
-    rows.length ? h("p.small.muted", { style: "margin:-6px 4px 0" }, "Tap a session to read it and talk to Claude.") : null,
-    h("button.btn.block", { style: "margin-top:12px", onclick: newSession }, "＋ New session"),
-    u ? [h("h2", "Claude plan"), h("section.card",
-      [["5-hour window", u.fiveHour], ["This week", u.sevenDay]].filter(([, w]) => w).map(([label, w]) =>
-        h("div", { style: "margin-bottom:10px" }, h("div.row", h("span.grow.small", label), h("b.small", `${w.pct}%`)),
-          h("div.bar", h("div", { style: `width:${w.pct}%` })))))] : null,
+    !isIOS && !load("nyeko.appHint.hidden") ? h("section.card.tinted",
+      h("div.card-body",
+        h("div.title", "Want Nyo on your screen?"),
+        h("p.sub", "Nyo floating over your other apps and the island from the camera hole come with the Nyeko app for Android."),
+        h("div.pair-btns",
+          h("a.btn.primary", { href: "/download.html" }, "Get the app"),
+          h("button.btn.ghost", { onclick: () => { save("nyeko.appHint.hidden", true); render(); } }, "Not now")))) : null,
+    section("Sessions", rows.length ? h("span.count", String(rows.length)) : null),
+    rows.length === 0
+      ? h("section.card.empty-card",
+          nyo(84, { eye: "closed" }),
+          h("div.title", "Nothing running"),
+          h("p.sub", many() ? "No coding session is open on your computers." : "No coding session is open on this computer."))
+      : h("section.card.list", rows.map(({ c, x }) => sessionRow(c, x))),
+    h("button.btn.dashed.block", { onclick: newSession }, icon("plus", 20), "New session"),
+    u ? [section("Claude plan"), h("section.card",
+      h("div.card-body", [["5-hour window", u.fiveHour], ["This week", u.sevenDay]].filter(([, w]) => w).map(([label, w]) =>
+        h("div.meter-row", h("div.meter-label", h("span", label), h("b", `${w.pct}%`)),
+          h("div.meter" + (w.pct >= 85 ? ".hot" : ""), h("div", { style: `width:${Math.min(100, w.pct)}%` }))))))] : null,
   ];
 }
 
@@ -607,7 +696,9 @@ function computerTab() {
   if (!c) return null;
   const m = c.mac;
   const kind = kindOf(c);
-  if (!m) return [picker(), h("section.card", h("p.empty", c.status === "open" ? `Loading ${c.desktop}…` : `${c.desktop} is not connected.`))];
+  if (!m) return [picker(), h("section.card.empty-card", nyo(72, { eye: "content" }),
+    h("div.title", c.status === "open" ? `Loading ${shortName(c)}…` : `${shortName(c)} is offline`),
+    c.status === "open" ? null : h("p.sub", "Open Nyeko on it, and check its relay is switched on."))];
   const ctl = (action, extra) => control(c, action, extra);
   const np = m.nowPlaying;
   let pos = np?.position ?? 0;
@@ -616,89 +707,116 @@ function computerTab() {
   const tLeft = t ? Math.max(0, (t.remaining ?? 0) - (t.paused ? 0 : Math.floor((Date.now() - c.macAt) / 1000))) : 0;
   const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
   const apps = (c.apps || []).filter((a) => a.name.toLowerCase().includes(state.appSearch.toLowerCase())).slice(0, 60);
+  const action = (ic, label, sub, onclick, cls = "") =>
+    h("button.action" + cls, { onclick }, h("span.action-ic", icon(ic)), h("span.action-label", label), sub ? h("span.action-sub", sub) : null);
   return [
     picker(),
-    h("h2", "Now playing"),
-    h("section.card", np ? [
-      h("div.row", h("div.art", icon("note")),
-        h("div.grow", h("div.title", np.title), h("div.sub", np.artist), h("div.small.muted", np.source))),
-      np.duration ? h("div.row", { style: "margin-top:12px" }, h("span.small.timer", mmss(pos)),
-        h("div.bar.grow", h("div", { style: `width:${Math.round(100 * pos / np.duration)}%` })), h("span.small.timer", mmss(np.duration))) : null,
-      h("div.row", { style: "justify-content:center;margin-top:14px;gap:16px" },
-        h("button.btn.round", { "aria-label": "Previous track", onclick: () => ctl("previous") }, icon("prev")),
-        h("button.btn.round.big.primary", { "aria-label": np.playing ? "Pause" : "Play", onclick: () => ctl("playPause") }, icon(np.playing ? "pause" : "play")),
-        h("button.btn.round", { "aria-label": "Next track", onclick: () => ctl("next") }, icon("next"))),
-    ] : h("p.empty", `Nothing is playing on ${c.desktop}.`)),
-    h("h2", "Sound"),
-    h("section.card",
-      h("div.row", { style: "gap:10px" },
-        h("button.btn.round", { "aria-label": "Volume down", onclick: () => ctl("volumeDown") }, "−"),
-        h("div.grow", h("div.bar", h("div", { style: `width:${m.muted ? 0 : (m.volume ?? 0)}%` })),
-          h("div.small.muted", { style: "margin-top:4px;text-align:center" }, m.muted ? "Muted" : m.volume != null ? `${m.volume}%` : "")),
-        h("button.btn.round", { "aria-label": "Volume up", onclick: () => ctl("volumeUp") }, "+"),
-        h("button.btn", { onclick: () => ctl("mute") }, m.muted ? "Unmute" : "Mute"))),
-    h("h2", `Your ${kind}`),
-    h("section.card",
-      m.next ? h("div.item", h("div.small.muted", "Next up"), h("div.title", m.next.title), h("div.sub", m.next.when)) : null,
-      m.timer !== undefined || c.os === "macos" ? h("div.item.row",
-        h("div.grow", h("div.title", "Focus timer"), h("div.sub", t ? `${t.phase === "work" ? "Work" : "Break"} · ${mmss(tLeft)} left` : "25 min of work, 5 of rest")),
-        h("button.btn" + (t ? "" : ".mint"), { onclick: () => ctl("timer") }, t ? "Stop" : "Start")) : null,
-      m.recording !== undefined ? h("div.item.row",
-        h("div.grow", h("div.title", "Notetaker"), h("div.sub", m.recording ? "Recording a meeting" : "Record and transcribe a call")),
-        h("button.btn" + (m.recording ? "" : ".primary"), { onclick: () => ctl("record") }, m.recording ? "Stop" : "Record")) : null,
-      h("div.item.row",
-        h("div.grow", h("div.title", "Screenshot"), h("div.sub", `Of the screen, kept on the ${kind}`)),
-        h("button.btn", { onclick: () => { if (ctl("screenshot")) toast(`Screenshot taken on ${c.desktop}.`); } }, "Take")),
-      m.battery ? h("div.item.small.muted", `Battery ${m.battery.percent}%${m.battery.charging ? " · charging" : ""}`) : null),
-    h("h2", "Lock and power"),
-    h("section.card",
-      h("div.apps", { style: "grid-template-columns:repeat(3,1fr)" },
-        h("button.btn", { onclick: () => { if (ctl("lock")) toast(`${c.desktop} is locked.`); } }, "Lock"),
-        h("button.btn", { onclick: () => ctl("displaySleep") }, "Screen off"),
-        h("button.btn", { onclick: () => { if (confirm(`Put ${c.desktop} to sleep? The phone loses it until it wakes.`)) ctl("sleep"); } }, "Sleep")),
-      h("div.row", { style: "gap:10px;margin-top:12px" },
-        h("button.btn.grow", { onclick: () => power(c, "restart") }, "Restart"),
-        h("button.btn.grow", { style: "color:var(--red)", onclick: () => power(c, "shutdown") }, "Shut down")),
-      h("p.small.muted", { style: "margin:10px 0 0" }, `Restart and shut down ask for your ${lockName}; apps with unsaved work can still object.`)),
-    m.apps?.length ? [h("h2", "Quick launch"),
-      h("section.card", h("div.apps", m.apps.map((a) => h("button.btn", { onclick: () => { if (ctl("open", { app: a.id })) toast(`Opening ${a.name}…`); } }, a.name))))] : null,
-    h("h2", "Open any app"),
-    h("section.card",
+    m.next ? h("section.card.next-up",
+      h("span.tile.fur", icon("calendar")),
+      h("span.row-main", h("span.row-meta", "Next up"), h("span.row-title", m.next.title), h("span.row-meta", m.next.when))) : null,
+
+    section("Now playing"),
+    h("section.card.player" + (np?.playing ? ".playing" : ""), np ? [
+      h("div.player-top",
+        h("div.record", { "aria-hidden": "true" }, h("div.label")),
+        h("div.row-main", h("div.track", np.title), h("div.row-meta", [np.artist, np.source].filter(Boolean).join(" · ")))),
+      np.duration ? h("div.scrub", h("span", mmss(pos)),
+        h("div.meter.thin", h("div", { style: `width:${Math.round(100 * pos / np.duration)}%` })), h("span", mmss(np.duration))) : null,
+      h("div.transport",
+        h("button.icon-btn", { "aria-label": "Previous track", onclick: () => ctl("previous") }, icon("prev")),
+        h("button.icon-btn.big", { "aria-label": np.playing ? "Pause" : "Play", onclick: () => ctl("playPause") }, icon(np.playing ? "pause" : "play", 28)),
+        h("button.icon-btn", { "aria-label": "Next track", onclick: () => ctl("next") }, icon("next"))),
+    ] : h("div.player-idle", h("div.record.still", { "aria-hidden": "true" }, h("div.label")), h("p.sub", `Nothing is playing on ${shortName(c)}.`))),
+
+    section("Sound"),
+    h("section.card.sound",
+      h("button.icon-btn", { "aria-label": m.muted ? "Unmute" : "Mute", "aria-pressed": m.muted ? "true" : "false", onclick: () => ctl("mute") }, icon(m.muted ? "mute" : "volume")),
+      h("button.icon-btn.small", { "aria-label": "Volume down", onclick: () => ctl("volumeDown") }, "−"),
+      h("div.volume", h("div.meter", h("div", { style: `width:${m.muted ? 0 : (m.volume ?? 0)}%` })),
+        h("span.vol-num", m.muted ? "Muted" : m.volume != null ? `${m.volume}%` : "")),
+      h("button.icon-btn.small", { "aria-label": "Volume up", onclick: () => ctl("volumeUp") }, "+")),
+
+    section(`On the ${kind}`, m.battery ? h("span.battery", icon("battery", 18), `${m.battery.percent}%${m.battery.charging ? " · charging" : ""}`) : null),
+    h("div.actions",
+      m.timer !== undefined || c.os === "macos" ? action("timer", "Focus timer", t ? `${t.phase === "work" ? "Work" : "Break"} · ${mmss(tLeft)}` : "25 / 5 min",
+        () => ctl("timer"), t ? ".active" : "") : null,
+      m.recording !== undefined ? action("mic", "Notetaker", m.recording ? "Recording" : "Record a call", () => ctl("record"), m.recording ? ".active.rec" : "") : null,
+      action("camera", "Screenshot", `Kept on the ${kind}`, () => { if (ctl("screenshot")) toast(`Screenshot taken on ${shortName(c)}.`); }),
+      action("lock", "Lock", null, () => { if (ctl("lock")) toast(`${shortName(c)} is locked.`); }),
+      action("screenOff", "Screen off", null, () => ctl("displaySleep")),
+      action("moon", "Sleep", null, () => { if (confirm(`Put ${c.desktop} to sleep? The phone loses it until it wakes.`)) ctl("sleep"); })),
+    h("div.power",
+      h("button.btn.ghost", { onclick: () => power(c, "restart") }, icon("restart", 20), "Restart"),
+      h("button.btn.ghost.danger", { onclick: () => power(c, "shutdown") }, icon("power", 20), "Shut down")),
+    h("p.note.center", `Restart and shut down ask for your ${lockName}. Apps with unsaved work can still object.`),
+
+    m.apps?.length ? [section("Quick launch"),
+      h("section.card.launcher", m.apps.map((a) => h("button.app", { onclick: () => { if (ctl("open", { app: a.id })) toast(`Opening ${a.name}…`); } },
+        monogram(a.name, "lg"), h("span.app-name", a.name))))] : null,
+
+    section("All apps"),
+    h("section.card.list",
       c.apps == null
-        ? h("button.btn.block", { onclick: () => { if (send(c, { type: "listApps" })) { c.apps = []; render(); } else toast(`${c.desktop} is not connected.`); } }, `Show the apps on ${c.desktop}`)
-        : [h("input#appsearch", { type: "text", placeholder: "Search apps", autocomplete: "off", "aria-label": "Search apps",
-              oninput: (e) => { state.appSearch = e.target.value; render(); } }),
-           h("div.list", { style: "margin-top:8px" }, c.apps.length === 0 ? h("p.empty", "Loading…")
-             : apps.map((a) => h("button.item", { style: "display:block;width:100%;text-align:left;background:none;border:none;padding:12px 0;font-weight:700;cursor:pointer",
-                 onclick: () => { if (ctl("openAny", { app: a.id })) toast(`Opening ${a.name} on ${c.desktop}…`); } }, a.name)))]),
+        ? h("div.card-body", h("button.btn.block", { onclick: () => { if (send(c, { type: "listApps" })) { c.apps = []; render(); } else toast(`${shortName(c)} is not connected.`); } },
+            `Show the apps on ${shortName(c)}`))
+        : [h("label.search", icon("search", 20),
+             h("input#appsearch", { type: "search", placeholder: "Search apps", autocomplete: "off", "aria-label": "Search apps",
+               oninput: (e) => { state.appSearch = e.target.value; render(); } })),
+           c.apps.length === 0 ? h("p.empty", "Loading…")
+             : apps.length === 0 ? h("p.empty", "No app by that name.")
+             : apps.map((a) => h("button.row-btn.app-row", { onclick: () => { if (ctl("openAny", { app: a.id })) toast(`Opening ${a.name} on ${shortName(c)}…`); } },
+                 monogram(a.name), h("span.row-main", h("span.row-title.plain", a.name.replace(/^\./, ""))), icon("open", 18)))]),
   ];
 }
 
 function nyoTab() {
   const c = cur();
   const msgs = state.chat;
+  const ask = (text) => {
+    if (!text || !c) return;
+    const id = b64url(random(9));
+    if (!send(c, { type: "ask", id, text })) return toast(`${shortName(c)} is not connected.`);
+    state.chat.push({ me: true, text, comp: c.id });
+    state.waiting.set(id, c.id);
+    render();
+  };
   return [
     picker(),
-    h("div.chat", { style: "margin-top:6px" },
-      msgs.length === 0 ? h("p.empty", `Ask Nyo anything, or tell it what to do on ${c?.desktop || "your computer"}: “pause the music”, “start a timer”, “what's next?”.`) : null,
-      msgs.map((m) => h("div.msg." + (m.me ? "me" : "nyo"), many() && !m.me ? h("small.from", comp(m.comp)?.desktop || "") : null, m.text)),
-      state.waiting.size ? h("div.msg.nyo.muted", "Nyo is thinking…") : null),
+    msgs.length === 0 ? h("div.nyo-hello",
+      nyo(120, { look: 0.2 }),
+      h("div.title", "Ask Nyo"),
+      h("p.sub", `Questions, or things to do on ${c ? shortName(c) : "your computer"}.`),
+      h("div.chips.wrap", ["Pause the music", "Start a focus timer", "What's next today?", "Lock my screen"].map((s) =>
+        h("button.chip-btn", { onclick: () => ask(s) }, s)))) : null,
+    h("div.chat",
+      msgs.map((m) => h("div.msg." + (m.me ? "me" : "nyo"), many() && !m.me ? h("small.from", comp(m.comp) ? shortName(comp(m.comp)) : "") : null, m.text)),
+      state.waiting.size ? h("div.msg.nyo.typing", h("span.dots", h("i"), h("i"), h("i"))) : null),
     h("div.composer", h("form", { onsubmit: (e) => {
       e.preventDefault();
       const input = e.target.querySelector("input");
       const text = input.value.trim();
-      if (!text || !c) return;
-      const id = b64url(random(9));
-      if (!send(c, { type: "ask", id, text })) return toast(`${c.desktop} is not connected.`);
-      state.chat.push({ me: true, text, comp: c.id });
-      state.waiting.set(id, c.id);
       input.value = "";
-      render();
+      ask(text);
     } },
-      h("input#ask", { type: "text", placeholder: many() ? `Message Nyo on ${c?.desktop}` : "Message Nyo", autocomplete: "off", enterkeyhint: "send", "aria-label": "Message Nyo" }),
-      h("button.btn.primary", { type: "submit" }, "Send"))),
+      h("input#ask", { type: "text", placeholder: many() ? `Message Nyo on ${c ? shortName(c) : ""}` : "Message Nyo", autocomplete: "off", enterkeyhint: "send", "aria-label": "Message Nyo" }),
+      h("button.send", { type: "submit", "aria-label": "Send" }, icon("send", 22)))),
   ];
 }
+
+/** A session's lines grouped into turns: what you said, what Claude did, what it answered. */
+function turnsOf(items) {
+  const turns = [];
+  let t = null;
+  for (const it of items) {
+    if (it.r === "you" || !t) { t = { you: null, tools: [], answer: [] }; turns.push(t); }
+    if (it.r === "you") t.you = it;
+    else if (it.r === "tools") t.tools.push(...String(it.t).split("\n").filter(Boolean));
+    else t.answer.push(it.t);
+  }
+  return turns;
+}
+
+const QUICK = ["Continue", "Run the tests", "Fix the errors", "Commit"];
 
 function sessionTab() {
   const t = state.thread;
@@ -708,42 +826,67 @@ function sessionTab() {
   const live = c.sessions.find((x) => x.pillId === t.id);
   const st = d?.state === "needsYou" ? "approval" : d?.state === "working" ? "working" : live?.state || "idle";
   const gone = d?.state === "gone";
-  const where = d ? [many() ? c.desktop : null, d.host, d.folder].filter(Boolean).join(" · ") : t.sub;
-  const items = d?.items || [];
+  const where = d ? [many() ? shortName(c) : null, d.host, d.folder].filter(Boolean).join(" · ") : t.sub;
+  const turns = turnsOf(d?.items || []);
+  const last = turns[turns.length - 1];
+  const earlier = turns.slice(0, -1).reverse();
   const queued = d?.queued || [];
   const canSend = d?.canMessage && !gone;
+  t.open = t.open || {};
   const hint = !d ? "" : gone ? "This session has ended."
     : !d.canMessage ? "Only Claude Code sessions take messages from the phone. You can still open it on the computer."
     : d.state === "working" ? "Claude is working: it reads your message when it finishes this turn."
-    : d.state === "needsYou" ? "Claude is waiting for you: answer it on the Now tab first."
+    : d.state === "needsYou" ? "Claude is waiting for you: answer the card above first."
     : d.note || "";
+  const toolsCard = (tools, key) => tools.length ? h("section.card.fold" + (t.open[key] ? ".open" : ""),
+    h("button.fold-head", { "aria-expanded": t.open[key] ? "true" : "false", onclick: () => { t.open[key] = !t.open[key]; render(); } },
+      h("span", "What it did"), h("span.count", String(tools.length)), h("span.grow"), icon("down", 18)),
+    t.open[key] ? h("div.tool-lines", tools.map((l) => h("div", l))) : h("div.tool-peek", tools[tools.length - 1])) : null;
+  const sendQuick = (text) => {
+    const box = document.getElementById("say");
+    if (!box) return;
+    box.value = text;
+    say(box.form);
+  };
   return [
-    h("div.row", { style: "margin:-4px 0 6px" },
-      h("button.link", { onclick: closeSession }, "‹ Sessions"), h("div.grow"),
-      h("button.link", { onclick: () => { if (control(c, "focus", { app: t.id })) toast(`Opening it on ${c.desktop}…`); } }, `Show on ${kindOf(c)}`)),
-    h("section.card.quiet", { style: "padding:12px 14px" },
-      h("div.row", h("div.grow", h("div.title", d?.title || t.title), h("div.sub", where)),
-        gone ? h("span.chip.idle", h("i"), "Ended") : h("span.chip." + sessionClass(st), h("i"), sessionLabel(st)))),
+    h("div.session-bar",
+      h("button.icon-btn", { "aria-label": "Back to sessions", onclick: closeSession }, icon("back")),
+      h("div.session-title", h("div.track", d?.title || t.title), h("div.row-meta", where)),
+      h("button.icon-btn", { "aria-label": `Show it on the ${kindOf(c)}`, onclick: () => { if (control(c, "focus", { app: t.id })) toast(`Opening it on ${shortName(c)}…`); } }, icon("open"))),
+    h("div.session-state", gone ? h("span.pill.idle", h("i.pip"), "Ended") : pill(st)),
     st === "approval" || st === "question" ? [approvalCard(c), questionCard(c)] : null,
-    h("div.thread",
-      !d ? h("p.empty", c.status === "open" ? "Loading the session…" : `Connect to ${c.desktop} to read it.`)
-      : !d.readable ? h("p.empty", "Nyeko can't read this session's conversation.")
-      : items.length === 0 ? h("p.empty", "Nothing said yet.") : null,
-      items.map((it) => it.r === "tools"
-        ? h("div.tools", it.t.split("\n").map((l) => h("div", l)))
-        : h("div.msg." + (it.r === "you" ? "me" : "nyo"), it.p ? h("small.from", "From your phone") : null, it.t)),
-      queued.map((q) => h("div.msg.me.queued", h("small.from", "Waiting for Claude"), q)),
-      queued.length ? h("button.link", { style: "align-self:flex-end", onclick: () => send(c, { type: "unqueue", session: t.id }) }, "Cancel waiting message") : null,
-      t.sending.map((m) => h("div.msg.me.queued", h("small.from", "Sending…"), m.text)),
-      d?.state === "working" ? h("div.tools.muted", "Claude is working…") : null),
-    canSend ? h("div.composer.solo", h("form", { onsubmit: (e) => { e.preventDefault(); say(e.target); } },
-      h("div.grow",
-        hint ? h("p.small.muted", { style: "margin:0 4px 6px" }, hint) : null,
-        h("div.row",
-          h("textarea#say", { rows: "1", placeholder: "Message Claude", "aria-label": "Message Claude", enterkeyhint: "send",
-            oninput: (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(160, e.target.scrollHeight) + "px"; } }),
-          h("button.btn.primary", { type: "submit" }, "Send")))))
-      : hint ? h("p.small.muted.center", hint) : null,
+    !d ? h("section.card.empty-card", nyo(64, { eye: "content" }), h("p.sub", c.status === "open" ? "Loading the session…" : `Connect to ${shortName(c)} to read it.`))
+    : !d.readable ? h("section.card.empty-card", h("p.sub", "Nyeko can't read this session's conversation."))
+    : !last ? h("section.card.empty-card", h("p.sub", "Nothing said yet."))
+    : [
+        last.you ? h("div.msg.me", last.you.p ? h("small.from", "From your phone") : null, last.you.t) : null,
+        toolsCard(last.tools, "last"),
+        last.answer.length ? h("section.card.answer", h("div.answer-head", nyo(28), h("span", "Claude's answer")),
+          h("div.answer-text", last.answer.join("\n\n"))) : null,
+        d?.state === "working" ? h("div.working", h("span.dots", h("i"), h("i"), h("i")), "Claude is working") : null,
+        earlier.length ? [section("Earlier turns"), h("section.card.list", earlier.map((turn, i) => {
+          const key = "e" + (earlier.length - i);
+          const open = t.open[key];
+          return h("div.turn" + (open ? ".open" : ""),
+            h("button.row-btn", { "aria-expanded": open ? "true" : "false", onclick: () => { t.open[key] = !open; render(); } },
+              h("span.row-main", h("span.row-title.plain", turn.you?.t || "Claude"), h("span.row-meta",
+                [turn.tools.length ? `${turn.tools.length} step${turn.tools.length === 1 ? "" : "s"}` : null, turn.answer.length ? "answered" : null].filter(Boolean).join(" · "))),
+              icon(open ? "down" : "chevron", 18)),
+            open ? h("div.turn-body", turn.tools.length ? h("div.tool-lines", turn.tools.map((l) => h("div", l))) : null,
+              turn.answer.length ? h("div.answer-text", turn.answer.join("\n\n")) : null) : null);
+        }))] : null,
+      ],
+    queued.map((q) => h("div.msg.me.queued", h("small.from", "Waits for Claude"), q)),
+    queued.length ? h("button.link.end", { onclick: () => send(c, { type: "unqueue", session: t.id }) }, "Cancel waiting message") : null,
+    t.sending.map((m) => h("div.msg.me.queued", h("small.from", "Sending…"), m.text)),
+    canSend ? h("div.composer.solo",
+      hint ? h("p.composer-hint", hint) : null,
+      h("div.chips", QUICK.map((q) => h("button.chip-btn", { onclick: () => sendQuick(q) }, q))),
+      h("form", { onsubmit: (e) => { e.preventDefault(); say(e.target); } },
+        h("textarea#say", { rows: "1", placeholder: "Tell Claude what to do next", "aria-label": "Message Claude", enterkeyhint: "send",
+          oninput: (e) => { e.target.style.height = "auto"; e.target.style.height = Math.min(160, e.target.scrollHeight) + "px"; } }),
+        h("button.send", { type: "submit", "aria-label": "Send" }, icon("send", 22))))
+      : hint ? h("p.note.center", hint) : null,
   ];
 }
 
@@ -753,33 +896,36 @@ function launchTab() {
   L.comp = c?.id;
   const projects = c?.mac?.projects || [];
   if (!projects.some((p) => p.id === L.project)) L.project = projects[0]?.id ?? null;
-  const back = h("button.link", { onclick: () => { state.launch = null; state.tab = "now"; render(); } }, "‹ Sessions");
+  const bar = (title) => h("div.session-bar",
+    h("button.icon-btn", { "aria-label": "Back", onclick: () => { state.launch = null; state.tab = "now"; render(); } }, icon("back")),
+    h("div.session-title", h("div.track", title)), h("span", { style: "width:44px" }));
   if (L.starting) {
     const late = Date.now() - L.starting.at > 60_000;
-    return [h("div.row", { style: "margin:-4px 0 6px" }, back),
-      h("section.card", { style: "text-align:center" },
-        h("div.title", L.starting.launched ? `Claude Code is starting in ${L.starting.name}…` : `Asking ${c?.desktop} to start ${L.starting.name}…`),
+    return [bar("New session"),
+      h("section.card.empty-card", nyo(84, { look: 0.3 }),
+        h("div.title", L.starting.launched ? `Claude Code is starting in ${L.starting.name}…` : `Asking ${c ? shortName(c) : "the computer"} to start ${L.starting.name}…`),
         h("p.sub", late ? "It is open in a terminal on the computer. It shows on the Now tab once Claude Code is up."
                         : "This opens as soon as Claude Code says hello."))];
   }
   return [
-    h("div.row", { style: "margin:-4px 0 6px" }, back),
-    h("h2", "New Claude Code session"),
+    bar("New session"),
     picker((x) => { L.comp = x.id; L.project = null; send(x, { type: "status" }); }),
-    !c?.mac ? h("section.card", h("p.empty", c?.status === "open" ? "Loading the folders…" : `${c?.desktop || "The computer"} is not connected.`))
-    : projects.length === 0 ? h("section.card", h("p.sub",
+    !c?.mac ? h("section.card.empty-card", h("p.sub", c?.status === "open" ? "Loading the folders…" : `${c ? shortName(c) : "The computer"} is not connected.`))
+    : projects.length === 0 ? h("section.card.empty-card", h("p.sub",
         "Nyeko learns your project folders from the sessions you run on the computer. Start one there once, and it shows here."))
     : h("form", { onsubmit: (e) => { e.preventDefault(); startSession(e.target); } },
-        h("section.card",
-          h("div.title", "Folder"),
-          h("div.opts", projects.map((p) => {
-            const on = p.id === L.project;
-            return h("button.opt" + (on ? ".on" : ""), { type: "button", "aria-pressed": on ? "true" : "false",
-              onclick: () => { L.project = p.id; render(); } }, p.name, h("small", p.where));
-          })),
-          h("label.field", { for: "launch-prompt" }, "What should Claude do?"),
-          h("textarea#launch-prompt", { placeholder: "Leave empty to just open Claude Code", "aria-label": "What should Claude do?" }),
-          h("p.small.muted", "The computer opens a terminal in that folder and starts Claude Code with this. You can follow and talk to it from here.")),
+        section("Folder"),
+        h("section.card.list", projects.map((p) => {
+          const on = p.id === L.project;
+          return h("button.row-btn.pick" + (on ? ".on" : ""), { type: "button", "aria-pressed": on ? "true" : "false",
+            onclick: () => { L.project = p.id; render(); } },
+            h(`span.tile.${on ? "tan" : "paper"}`, icon("terminal", 20)),
+            h("span.row-main", h("span.row-title", p.name), h("span.row-meta", p.where)),
+            on ? h("span.check", icon("check", 18)) : null);
+        })),
+        section("What should Claude do?"),
+        h("textarea#launch-prompt.field", { placeholder: "Leave empty to just open Claude Code", "aria-label": "What should Claude do?" }),
+        h("p.note", "The computer opens a terminal in that folder and starts Claude Code with this. Follow it and talk to it from here."),
         h("button.btn.primary.block", { type: "submit" }, "Start session")),
   ];
 }
@@ -788,59 +934,73 @@ function settingsTab() {
   const hasFace = !!load(STORE.cred);
   const alerts = alertsComputer();
   return [
-    h("h2", "Your computers"),
-    h("section.card",
-      h("div.list", state.computers.map((c) => h("div.item",
-        h("div.row",
-          h("span.dot." + dotOf(c)),
-          h("div.grow", h("div.title", c.desktop), h("div.sub", `${statusWord(c)} · through ${new URL(c.p.relay.replace(/^ws/, "http")).host}`)),
-          many() && c !== cur() ? h("button.btn", { onclick: () => { state.current = c.id; saveComputers(); render(); } }, "Use") : many() ? h("span.chip.done", "In use") : null),
-        h("button.link", { onclick: () => removeComputer(c) }, `Remove ${c.desktop}`)))),
-      h("button.btn.primary.block", { style: "margin-top:10px", onclick: () => { state.tab = "add"; render(); } }, "＋ Add a computer"),
-      h("p.small.muted", { style: "margin:10px 0 0" }, "Each computer is paired with its own code, end-to-end encrypted. Removing one cuts it off at once.")),
-    !standalone() && !isIOS ? [h("h2", "Install"),
-      h("section.card",
+    h("div.session-bar",
+      h("button.icon-btn", { "aria-label": "Done", onclick: () => { state.tab = "now"; render(); } }, icon("back")),
+      h("div.session-title", h("div.track", "Settings")), h("span", { style: "width:44px" })),
+    section("Your computers"),
+    h("section.card.list",
+      state.computers.map((c) => {
+        const { device, account } = nameParts(c);
+        const short = shortName(c);
+        const other = short === device ? account : device;
+        const inUse = many() && c === cur();
+        return h("div.computer",
+          h(`span.tile.${c.status === "open" ? "mint" : "paper"}`, icon(osIcon(c))),
+          h("span.row-main",
+            h("span.row-title", short),
+            h("span.row-meta.wrap", h("span.dot." + dotOf(c)), [other || null, statusWord(c)].filter(Boolean).join(" · ")),
+            h("span.row-meta.faint", `via ${new URL(c.p.relay.replace(/^ws/, "http")).host}`)),
+          h("span.computer-actions",
+            many() ? (inUse ? h("span.tag", "In use") : h("button.btn.small", { onclick: () => { state.current = c.id; saveComputers(); render(); } }, "Use")) : null,
+            h("button.link.danger", { onclick: () => removeComputer(c) }, "Remove")));
+      }),
+      h("div.card-body", h("button.btn.primary.block", { onclick: () => { state.tab = "add"; render(); } }, icon("plus", 20), "Add a computer"))),
+    h("p.note", "Each computer is paired with its own code, end-to-end encrypted. Removing one cuts it off at once."),
+    !standalone() && !isIOS ? [section("Install"),
+      h("section.card", h("div.card-body",
         h("p.sub", "Put Nyeko on your home screen: it opens like an app, and stays paired."),
         installPrompt
           ? h("button.btn.primary", { onclick: async () => { installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; render(); } }, "Install Nyeko")
-          : h("p.small.muted", "Chrome menu ⋮ → Install app (or Add to Home screen)."))] : null,
-    h("h2", isIOS ? "Face ID" : "Screen lock"),
-    h("section.card",
-      h("p.sub", hasFace ? `On. Allow, answers, messages and power actions ask for your ${lockName}.` : `Allow and answers need your ${lockName}. Deny never does.`),
-      h("button.btn" + (hasFace ? "" : ".primary"), { onclick: setupFaceId }, hasFace ? "Set up again" : `Set up ${isIOS ? "Face ID" : "screen lock"}`)),
-    h("h2", "Alerts"),
-    h("section.card",
-      standalone() || !isIOS ? null : h("p.sub", "Alerts need Nyeko on the Home Screen: Share → Add to Home Screen, open it from there, and pair again."),
-      h("p.sub", alerts ? `When Claude needs you on ${alerts.desktop} and Nyeko is closed, your phone shows “Nyo needs you”. Nothing about the command is in the alert.`
-                        : "None of your computers can send alerts to this web app yet."),
-      alerts ? h("button.btn" + (load(STORE.alerts) === alerts.id ? "" : ".primary"), { onclick: enableAlerts },
-        load(STORE.alerts) === alerts.id ? "Alerts are on" : "Turn on alerts") : null),
-    h("p.small.muted.center", `Web app ${VERSION}`),
-    h("button.btn.block", { onclick: () => { state.tab = "now"; render(); } }, "Done"),
+          : h("p.note", "Chrome menu ⋮ → Install app (or Add to Home screen).")))] : null,
+    section(isIOS ? "Face ID" : "Screen lock"),
+    h("section.card.setting",
+      h("span.tile.fur", icon("shield")),
+      h("span.row-main", h("span.row-title", hasFace ? "On" : "Off"),
+        h("span.row-meta.wrap", hasFace ? `Allow, answers, messages and power actions ask for your ${lockName}.` : `Allow and answers need your ${lockName}. Deny never does.`)),
+      h("button.btn.small" + (hasFace ? "" : ".primary"), { onclick: setupFaceId }, hasFace ? "Redo" : "Set up")),
+    section("Alerts"),
+    h("section.card.setting",
+      h("span.tile.pink", icon("bell")),
+      h("span.row-main", h("span.row-title", alerts && load(STORE.alerts) === alerts.id ? "On" : "Off"),
+        h("span.row-meta.wrap", !standalone() && isIOS ? "Alerts need Nyeko on the Home Screen: Share → Add to Home Screen, open it from there, and pair again."
+          : alerts ? `When Claude needs you on ${shortName(alerts)} and Nyeko is closed, your phone shows “Nyo needs you”. Nothing about the command is in the alert.`
+          : "None of your computers can send alerts to this web app yet.")),
+      alerts && load(STORE.alerts) !== alerts.id ? h("button.btn.small.primary", { onclick: enableAlerts }, "Turn on") : null),
+    h("p.version", `Nyeko web app · ${VERSION}`),
   ];
 }
 
 function androidScreen() {
   const o = state.androidOffer;
   const download = state.apk
-    ? h("a.btn" + (o.noApp ? ".primary" : "") + ".block", { href: "/downloads/android", style: "text-decoration:none;color:inherit" },
+    ? h("a.btn" + (o.noApp ? ".primary" : "") + ".block", { href: "/downloads/android" },
         `Download the app (${state.apk.versionName}, ${(state.apk.size / 1048576).toFixed(0)} MB)`)
-    : h("p.small.muted", "No Nyeko for Android build is published yet (GitHub Actions → android → Run workflow).");
-  return h("main.screen.center",
-    h("img.cat.big", { src: "/icons/icon-512.png", alt: "Nyo the cat" }),
-    h("h1", { style: "font-size:30px;margin:0 0 6px" }, "Nyeko for Android"),
-    h("p.sub", "Nyo on your screen, the island from the camera hole, alerts and widgets: the app does what a web page can't."),
-    h("section.card", { style: "text-align:left;margin-top:18px" },
+    : h("p.note", "No Nyeko for Android build is published yet (GitHub Actions → android → Run workflow).");
+  return h("main.screen.welcome",
+    nyo(132, { look: 0.15 }),
+    h("h1.hero", "Nyeko for Android"),
+    h("p.lede", "Nyo on your screen, the island from the camera hole, alerts and widgets: the app does what a web page can't."),
+    h("section.card", h("div.card-body",
       o.noApp
         ? [h("div.title", "The Nyeko app isn't installed yet"),
            h("ol.steps", h("li", "Tap Download the app, then open the file."), h("li", "Allow installs from Chrome when Android asks, and install."),
              h("li", "Come back here and tap Open in the Nyeko app: it pairs with your Mac.")),
            download,
-           h("button.btn.block", { style: "margin-top:10px", onclick: openApp }, "Open in the Nyeko app")]
+           h("button.btn.block", { onclick: openApp }, "Open in the Nyeko app")]
         : [h("div.title", "Pair the Nyeko app with your Mac"),
            h("p.sub", "It opens the app and asks you to confirm. Nothing is stored in this browser."),
            h("button.btn.primary.block", { onclick: openApp }, "Open in the Nyeko app"),
-           h("div", { style: "margin-top:10px" }, download)]),
+           download])),
     h("button.link", { onclick: () => { const code = location.hash; state.androidOffer = null;
       history.replaceState(null, "", location.pathname); pair(code); } }, "Use Nyeko in the browser instead"));
 }
@@ -848,47 +1008,51 @@ function androidScreen() {
 function pairScreen() {
   const fromLink = location.hash.startsWith("#pair=") || location.hash.startsWith("#setup=");
   const adding = state.computers.length > 0;
-  return h("main.screen.center",
-    h("img.cat.big", { src: "/icons/icon-512.png", alt: "Nyo the cat" }),
-    h("h1", { style: "font-size:30px;margin:0 0 6px" }, adding ? "Add a computer" : "Nyeko"),
-    h("p.sub", adding ? "Pair another Mac or your Windows PC: each one shows here with its own sessions and controls."
-                      : "Nyo in your pocket: approve, answer, chat and control your computers."),
+  return h("main.screen.welcome",
+    adding ? h("div.session-bar",
+      h("button.icon-btn", { "aria-label": "Cancel", onclick: () => { state.tab = "settings"; render(); } }, icon("back")),
+      h("div.session-title"), h("span", { style: "width:44px" })) : null,
+    nyo(adding ? 104 : 140, { look: fromLink ? 0.3 : 0 }),
+    h("h1.hero", adding ? "Add a computer" : "Nyeko"),
+    h("p.lede", adding ? "Pair another Mac or your Windows PC: each one shows here with its own sessions and controls."
+                       : "Nyo in your pocket: approve, answer, chat and control your computers."),
     // The camera opened this code in Safari, which keeps its own storage: the Home Screen app gets it through the
     // iPhone's clipboard (works for a Mac and a Windows PC alike).
-    !standalone() && fromLink && isIOS ? h("section.card", { style: "text-align:left;margin-top:18px" },
+    !standalone() && fromLink && isIOS ? h("section.card.tinted", h("div.card-body",
       h("div.title", "Add this computer to Nyeko"),
       h("button.btn.primary.block", { onclick: async () => {
         try { await navigator.clipboard.writeText(location.href); toast("Copied. Now open Nyeko from your Home Screen."); }
         catch { toast("Copy did not work: long-press the address bar and copy it."); }
       } }, "Copy pairing code"),
-      h("ol.steps", h("li", "Open Nyeko from your Home Screen (not yet there? Share › Add to Home Screen first)."),
-        h("li", "Settings › Your computers › ＋ Add a computer › Paste pairing code. Your other computers stay.")),
-      h("button.link", { onclick: () => addComputer(location.hash) }, "Or use Nyeko here in Safari")) : null,
+      h("ol.steps", h("li", "Open Nyeko from your Home Screen (not there yet? Share › Add to Home Screen first)."),
+        h("li", "Settings › Add a computer › Paste pairing code. Your other computers stay.")),
+      h("button.link", { onclick: () => addComputer(location.hash) }, "Or use Nyeko here in Safari"))) : null,
     // In Safari on the iPhone, without a code: install first (a pairing made in Safari stays in Safari).
-    !standalone() && !fromLink && isIOS ? h("section.card.alert", { style: "text-align:left;margin-top:18px" },
+    !standalone() && !fromLink && isIOS ? h("section.card.tinted", h("div.card-body",
       h("div.title", "Install Nyeko first"),
       h("ol.steps", h("li", "Tap Share (the square with an arrow), then Add to Home Screen → Add."),
         h("li", "Open Nyeko from the Home Screen and pair there: it keeps its own pairing, alerts and Face ID.")),
-      h("a.link", { href: "/download.html" }, "All the steps")) : null,
-    h("section.card", { style: "text-align:left;margin-top:18px" },
+      h("a.link", { href: "/download.html" }, "All the steps"))) : null,
+    h("section.card", h("div.card-body",
       h("div.title", "Pair with a computer"),
-      h("p.sub", isIOS ? "Scan the computer's QR code (Nyeko → Phone) with the Camera app and tap Copy pairing code, or on a Mac use Copy pairing code. Then tap Paste pairing code here."
+      h("p.sub", isIOS ? "Scan the computer's QR code (Nyeko → Phone) with the Camera app and tap Copy pairing code, or on a Mac use Copy pairing code. Then paste it here."
                        : "Scan the QR code on the computer (Nyeko → Phone) with your camera, or paste its pairing code or link."),
       h("button.btn.primary.block", { onclick: async () => {
         try { addComputer(await navigator.clipboard.readText()); } catch { toast("Paste the code in the box below."); }
       } }, "Paste pairing code"),
-      h("label.field", { for: "code" }, "Or paste it here"),
-      h("textarea#code", { autocomplete: "off", autocapitalize: "off", spellcheck: "false" }),
-      h("button.btn.block", { style: "margin-top:10px", onclick: () => addComputer(document.getElementById("code").value) }, "Pair")),
-    adding ? h("button.link", { onclick: () => { state.tab = "settings"; render(); } }, "Cancel") : null);
+      h("textarea#code.field", { autocomplete: "off", autocapitalize: "off", spellcheck: "false", placeholder: "Or paste the code here", "aria-label": "Pairing code" }),
+      h("button.btn.block", { onclick: () => addComputer(document.getElementById("code").value) }, "Pair"))));
 }
 
 function tabs() {
   const need = state.computers.reduce((n, c) => n + (c.approval ? 1 : 0) + (c.question ? 1 : 0), 0);
   const c = cur();
-  const tab = (id, label, badge) => h("button", { "aria-current": state.tab === id ? "page" : null,
-    onclick: () => { state.tab = id; render(); } }, h("span", label, badge ? h("span.badge", badge) : null));
-  return h("nav.tabs", tab("now", "Now", need || null), tab("mac", many() ? "Computers" : c?.os === "windows" ? "PC" : "Mac"), tab("nyo", "Nyo"));
+  const tab = (id, ic, label, badge) => h("button", { "aria-current": state.tab === id ? "page" : null,
+    onclick: () => { state.tab = id; render(); scrollTo(0, 0); } }, icon(ic, 22), h("span", label), badge ? h("span.badge", String(badge)) : null);
+  return h("nav.tabs", h("div.tabs-inner",
+    tab("now", "now", "Now", need || null),
+    tab("mac", c?.os === "windows" && !many() ? "desktop" : "laptop", many() ? "Computers" : c?.os === "windows" ? "PC" : "Mac"),
+    tab("nyo", "cat", "Nyo")));
 }
 
 // ── render ───────────────────────────────────────────────────────────────────────────────────────────
@@ -912,7 +1076,8 @@ function render() {
   else if (!paired || state.tab === "add") view = pairScreen();
   else {
     const body = { now: nowTab, mac: computerTab, nyo: nyoTab, settings: settingsTab, session: sessionTab, launch: launchTab }[state.tab]?.() ?? nowTab();
-    view = h("main.screen" + (state.tab === "session" ? ".chatting" : ""), header(), body);
+    const main = ["now", "mac", "nyo"].includes(state.tab);
+    view = h("main.screen" + (state.tab === "session" ? ".chatting" : "") + (state.tab === "nyo" ? ".chatting" : ""), main ? header() : null, body);
   }
   app.replaceChildren(view, paired && !state.androidOffer && !["settings", "session", "launch", "add"].includes(state.tab) ? tabs() : "",
     state.toast ? h("div.toast", { role: "status" }, state.toast) : "");
@@ -950,6 +1115,11 @@ function render() {
     save(STORE.oldPairing, null);
   }
   state.computers = list.filter(validPairing).map(newComputer);
+  // phone/tests/preview.html only: a still picture of the app with made-up computers, for checking the design. Nothing connects.
+  if (PREVIEW) {
+    state.computers = PREVIEW.computers.map((x) => Object.assign(newComputer(x.p), x.live));
+    Object.assign(state, PREVIEW.state || {});
+  }
   state.current = load(STORE.current) || state.computers[0]?.id || null;
   if (load(STORE.alerts) === true) save(STORE.alerts, alertsComputer()?.id ?? null);   // alerts were on for the one Mac
 }
@@ -972,5 +1142,5 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") return;
   for (const c of state.computers) { c.channel?.wake(); if (c.status === "open") send(c, { type: "status" }); }
 });
-for (const c of state.computers) if (!c.channel) connect(c);
+if (!PREVIEW) for (const c of state.computers) if (!c.channel) connect(c);
 render();

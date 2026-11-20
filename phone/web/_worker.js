@@ -25,7 +25,7 @@ const SECURITY = {
   "X-Content-Type-Options": "nosniff",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self), publickey-credentials-create=(self)",
 };
-const NO_CACHE = new Set(["/", "/index.html", "/sw.js", "/app.js", "/relay.js", "/setup.js", "/style.css", "/download.html", "/download.js"]);
+const NO_CACHE = new Set(["/", "/index.html", "/sw.js", "/app.js", "/relay.js", "/setup.js", "/nyo.js", "/style.css", "/download.html", "/download.js"]);
 
 export default {
   async fetch(request, env, ctx) {

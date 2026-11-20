@@ -56,6 +56,7 @@ Their copyright notices stay in [`LICENSE`](LICENSE) and [`android/LICENSE`](and
 - **Nyo, the Nyeko name, the icons and the sounds**: © 2026 Rohil Sagar, all rights reserved. They are not covered by
   the MIT License, even where code draws or generates them. See [`LICENSE-ASSETS.md`](LICENSE-ASSETS.md).
 - **Coucou's name, Mochi, its icon, sounds and media** belong to Louis Raillé and are not part of Nyeko.
+- **Fonts in the phone web app**: [Fredoka](https://github.com/hafontia/Fredoka-One) and [Nunito](https://github.com/googlefonts/nunito), SIL Open Font License 1.1 (`phone/web/fonts/`).
 
 Nyeko is an independent project. It is not made, endorsed or supported by Louis Raillé or the Coucou project; please
 send Nyeko's issues here, not to Coucou.

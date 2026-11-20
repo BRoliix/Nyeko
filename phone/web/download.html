@@ -4,37 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Download Nyeko</title>
-<meta name="theme-color" content="#FFF6E9">
+<meta name="theme-color" content="#FBF1E3">
 <link rel="icon" href="/icons/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
 <script type="module" src="/download.js"></script>
 </head>
 <body>
-<main class="screen center" id="download">
-  <img class="cat big" src="/icons/icon-512.png" alt="Nyo the cat">
-  <h1 style="font-size:30px;margin:0 0 6px">Download Nyeko</h1>
-  <p class="sub">Nyo on your computers and your phones: approve, answer, chat, start sessions and control your Mac and your PC.</p>
-  <h2>Mac</h2>
-  <section class="card" id="mac" style="text-align:left"><p class="empty">Looking for the newest build…</p></section>
-  <h2>Windows</h2>
-  <section class="card" id="windows" style="text-align:left"><p class="empty">Looking for the newest build…</p></section>
-  <h2>Android</h2>
-  <section class="card" id="android" style="text-align:left"><p class="empty">Looking for the newest build…</p></section>
-  <h2>iPhone</h2>
-  <section class="card" id="iphone" style="text-align:left">
-    <div class="title">Nyeko for iPhone</div>
-    <p class="sub">The iPhone app installs from Safari, without the App Store, and updates itself. iOS 16.4 or later.</p>
-    <p class="small" id="iphone-here" hidden><b>You're on an iPhone in Safari: start at step 2.</b></p>
-    <p class="small" id="iphone-not-safari" hidden><b>Open this page in Safari: other browsers can't add it to the Home Screen.</b></p>
-    <ol class="steps">
-      <li>On the iPhone, open <b>nyeko-phone.pages.dev</b> in <b>Safari</b>.</li>
-      <li>Tap <b>Share</b> (the square with an arrow), then <b>Add to Home Screen</b> → <b>Add</b>.</li>
-      <li>Open <b>Nyeko</b> from the Home Screen (not Safari: the Home Screen app keeps its own pairing).</li>
-      <li>Pair a computer: on it, Nyeko → Phone; scan the code with the <b>Camera</b> app, tap <b>Copy pairing code</b>, then in Nyeko tap <b>Paste pairing code</b>. More computers: Settings › Your computers › Add a computer.</li>
-      <li>In Nyeko › Settings: set up <b>Face ID</b> and <b>Turn on alerts</b>.</li>
-    </ol>
-    <a class="btn primary block" href="/" style="text-decoration:none;color:inherit">Open Nyeko</a>
-  </section>
+<main class="screen welcome" id="download">
+  <canvas id="hero-nyo" class="nyo" width="0" height="0" aria-hidden="true"></canvas>
+  <h1 class="hero">Download Nyeko</h1>
+  <p class="lede">Nyo on your computers and your phones: approve, answer, chat, start sessions and control your Mac and your PC.</p>
+  <div id="cards">
+    <section class="card dl" id="mac"><div class="card-body"><p class="empty">Looking for the newest build…</p></div></section>
+    <section class="card dl" id="windows"><div class="card-body"><p class="empty">Looking for the newest build…</p></div></section>
+    <section class="card dl" id="android"><div class="card-body"><p class="empty">Looking for the newest build…</p></div></section>
+    <section class="card dl" id="iphone"><div class="card-body">
+      <div class="dl-head"><span class="tile fur" data-icon="phone"></span><span class="row-main"><span class="row-title">Nyeko for iPhone</span><span class="row-meta">From Safari, no App Store · iOS 16.4 or later</span></span></div>
+      <p class="note" id="iphone-here" hidden><b>You're on an iPhone in Safari: start at step 2.</b></p>
+      <p class="note" id="iphone-not-safari" hidden><b>Open this page in Safari: other browsers can't add it to the Home Screen.</b></p>
+      <ol class="steps">
+        <li>On the iPhone, open <b>nyeko-phone.pages.dev</b> in <b>Safari</b>.</li>
+        <li>Tap <b>Share</b> (the square with an arrow), then <b>Add to Home Screen</b> → <b>Add</b>.</li>
+        <li>Open <b>Nyeko</b> from the Home Screen (not Safari: the Home Screen app keeps its own pairing).</li>
+        <li>Pair a computer: on it, Nyeko → Phone; scan the code with the <b>Camera</b> app, tap <b>Copy pairing code</b>, then in Nyeko tap <b>Paste pairing code</b>. More computers: Settings › Add a computer.</li>
+        <li>In Nyeko › Settings: set up <b>Face ID</b> and <b>Turn on alerts</b>.</li>
+      </ol>
+      <a class="btn primary block" href="/">Open Nyeko</a>
+    </div></section>
+  </div>
 </main>
 </body>
 </html>
