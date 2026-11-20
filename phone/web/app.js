@@ -2,8 +2,9 @@
 // Several computers can be paired (your Macs, your Windows PC): one encrypted channel each, everything shown together.
 // Untrusted text (commands, session lines, Nyo's replies) is only ever set as text, never as HTML.
 import { PhoneChannel, b64url, fromB64url, random } from "./relay.js";
+import { parseSetup, sendSetup } from "./setup.js";
 
-const VERSION = "2026-11-19 · nyeko 6";   // shown in Settings: tells which web app the phone runs
+const VERSION = "2026-11-20 · nyeko 7";   // shown in Settings: tells which web app the phone runs
 const STORE = { computers: "nyeko.computers", current: "nyeko.current", cred: "nyeko.faceid", alerts: "nyeko.alerts", oldPairing: "nyeko.pairing" };
 const APPROVAL_TTL = 115_000; // the computer dismisses a request after 115 s
 const app = document.getElementById("app");
@@ -146,8 +147,31 @@ function saveComputers() {
   save(STORE.current, state.current);
 }
 
+/**
+ * A new computer's setup code (its QR code, Nyeko → Phone, before it has a relay): this phone sends it the relay's address
+ * and access key from a computer it already has, encrypted to the code's key, and adds it with the pairing code it answers
+ * with (setup.js, docs/RELAY_SETUP.md).
+ */
+async function setupComputer(text) {
+  const offer = parseSetup(text);
+  history.replaceState(null, "", location.pathname);
+  const from = state.computers.find((c) => c.p.relay === offer.relay) || state.computers[0];
+  if (!from) {
+    return toast("Set up your first computer by hand once (Nyeko → Phone: the relay's address and access key). "
+      + "After that, scan the code on each new computer and it sets itself up.", 9000);
+  }
+  toast(`Setting up ${offer.name}…`, 60_000);
+  try {
+    const code = await sendSetup(offer, { relay: from.p.relay, access: from.p.access, phone: isIOS ? "iPhone" : "Phone" });
+    addComputer(code);
+  } catch (e) {
+    toast(e?.message || "The setup did not work: try again.", 8000);
+  }
+}
+
 /** Adds (or, for the same room, replaces) a computer and connects to it. */
 function addComputer(code) {
+  if (parseSetup(code)) return void setupComputer(code);
   const { p, why } = readPairing(code);
   if (!p) return toast(why, 7000);
   history.replaceState(null, "", location.pathname);   // the code never stays in the address bar
@@ -822,7 +846,7 @@ function androidScreen() {
 }
 
 function pairScreen() {
-  const fromLink = location.hash.startsWith("#pair=");
+  const fromLink = location.hash.startsWith("#pair=") || location.hash.startsWith("#setup=");
   const adding = state.computers.length > 0;
   return h("main.screen.center",
     h("img.cat.big", { src: "/icons/icon-512.png", alt: "Nyo the cat" }),
@@ -942,6 +966,8 @@ if (location.hash.startsWith("#pair=") && (standalone() || !isIOS)) {
     addComputer(location.hash);
   }
 }
+// A new computer's setup code, scanned with the camera (Android) or opened in the Home Screen app.
+if (location.hash.startsWith("#setup=") && (standalone() || !isIOS)) setupComputer(location.hash);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") return;
   for (const c of state.computers) { c.channel?.wake(); if (c.status === "open") send(c, { type: "status" }); }

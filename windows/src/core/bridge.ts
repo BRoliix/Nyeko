@@ -59,6 +59,18 @@ export interface PhoneRelayStatus {
   shown: boolean;
 }
 
+/** Nyeko: "Set up with your phone" (docs/RELAY_SETUP.md): the setup code on screen and what became of it. */
+export interface PhoneSetupStatus {
+  state: "idle" | "waiting" | "done" | "failed";
+  link: string;
+  qrSvg: string;
+  /** Why it failed: unreachable, expired, other, error (then `message` says what this computer could not do). */
+  reason: string;
+  message: string;
+  /** The phone that set this computer up. */
+  phone: string;
+}
+
 /** Session details for the phone: the switch (off by default). */
 export interface PhoneDetailsStatus {
   enabled: boolean;
@@ -368,6 +380,10 @@ export const Bridge = {
   phoneRelaySet: (enabled: boolean, url: string) => callOrThrow<PhoneRelayStatus>("phone_relay_set", { enabled, url }),
   /** Write-only: stored in the OS keystore, never sent back. An empty value clears it. */
   phoneRelaySetAccess: (access: string) => callOrThrow<PhoneRelayStatus>("phone_relay_set_access", { access }),
+  /** Nyeko: shows a new setup code for `relay` (replacing one on screen) and waits for a phone. */
+  phoneSetupStart: (relay: string) => callOrThrow<PhoneSetupStatus>("phone_setup_start", { relay }),
+  phoneSetupStatus: () => call<PhoneSetupStatus>("phone_setup_status"),
+  phoneSetupCancel: () => call<PhoneSetupStatus>("phone_setup_cancel"),
   phoneUsageStatus: () => call<PhoneUsageStatus>("phone_usage_status"),
   /** Off by default; only from the switch in Settings. Phones are reconnected so they learn about it. */
   phoneUsageSetEnabled: (enabled: boolean) => callOrThrow<PhoneUsageStatus>("phone_usage_set_enabled", { enabled }),

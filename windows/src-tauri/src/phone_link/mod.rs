@@ -26,6 +26,7 @@ mod pairing;
 mod relay_client;
 mod relay_crypto;
 mod server;
+mod setup;
 #[cfg(test)]
 mod tests;
 
@@ -135,6 +136,8 @@ pub struct PhoneLink {
     relay: Mutex<Option<relay_client::Handle>>,
     /// Nyeko: the web app's room on the same relay.
     relay_web: Mutex<Option<relay_client::Handle>>,
+    /// Nyeko: the "set up with your phone" code on screen (setup.rs), while there is one.
+    setup: Mutex<Option<(tauri::async_runtime::JoinHandle<()>, Arc<Mutex<setup::SetupStatus>>)>>,
 }
 
 impl PhoneLink {
@@ -149,6 +152,7 @@ impl PhoneLink {
             error: Mutex::new(None),
             relay: Mutex::new(None),
             relay_web: Mutex::new(None),
+            setup: Mutex::new(None),
         }
     }
 
@@ -525,6 +529,82 @@ pub fn phone_relay_set_access(
     }
     link.sync_relay();
     Ok(relay_status_of(&link, &shared))
+}
+
+// ── Nyeko: set up with your phone (setup.rs, docs/RELAY_SETUP.md) ──
+
+/// Shows a new setup code for `relay` (the one already showing is replaced) and waits for a phone in its setup room.
+#[tauri::command]
+pub fn phone_setup_start(window: WebviewWindow, link: State<PhoneLink>, relay: String) -> Result<setup::SetupStatus, String> {
+    only_settings(&window)?;
+    let target = relay_client::Target::parse(&relay).map_err(String::from)?;
+    let cid = pairing::computer_id(&*link.store).unwrap_or_default();
+    let offer = setup::new_offer(NYEKO_WEB, &target, &pairing::phone_name(), &cid)?;
+    let status = Arc::new(Mutex::new(setup::SetupStatus {
+        state: "waiting".into(),
+        qr_svg: pairing::qr_svg(&offer.link).unwrap_or_default(),
+        link: offer.link.clone(),
+        ..Default::default()
+    }));
+    let app = link.app.clone();
+    let apply: setup::Apply = Arc::new(move |relay, access| apply_setup(&app, relay, access));
+    let task = tauri::async_runtime::spawn(setup::run(offer, target, apply, status.clone()));
+    if let Some((old, _)) = link.setup.lock().unwrap().replace((task, status.clone())) {
+        old.abort();
+    }
+    log::line("phone link: setup code shown");
+    let shown = status.lock().unwrap().clone();
+    Ok(shown)
+}
+
+#[tauri::command]
+pub fn phone_setup_status(window: WebviewWindow, link: State<PhoneLink>) -> Result<setup::SetupStatus, String> {
+    only_settings(&window)?;
+    let current = link.setup.lock().unwrap().as_ref().map(|(_, s)| s.lock().unwrap().clone());
+    Ok(current.unwrap_or_else(setup::SetupStatus::idle))
+}
+
+#[tauri::command]
+pub fn phone_setup_cancel(window: WebviewWindow, link: State<PhoneLink>) -> Result<setup::SetupStatus, String> {
+    only_settings(&window)?;
+    if let Some((task, _)) = link.setup.lock().unwrap().take() {
+        task.abort();
+    }
+    Ok(setup::SetupStatus::idle())
+}
+
+/// What a phone sent through the setup room, saved as if typed in Settings: the access key, the relay switch and address,
+/// the phone link on. Returns the pairing code the phone adds, and this computer's name.
+fn apply_setup(app: &AppHandle, relay: &str, access: &str) -> Result<(String, String), String> {
+    let link = app.state::<PhoneLink>();
+    let shared = app.state::<Shared>();
+    let target = relay_client::Target::parse(relay).map_err(|_| "The relay address the phone sent is not valid.".to_string())?;
+    if !relay_client::is_access_key(access.trim()) {
+        return Err("The access key the phone sent is not valid.".into());
+    }
+    relay_client::set_access_key(&*link.store, access)?;
+    let updated = {
+        let mut current = shared.settings.lock().unwrap();
+        current.phone_relay = true;
+        current.phone_relay_url = target.display();
+        current.phone_link = true;
+        if let Err(err) = settings::save(&current) {
+            log::line(format!("could not save settings: {err}"));
+        }
+        current.clone()
+    };
+    let started = link.running.lock().unwrap().is_some();
+    if started {
+        link.sync_relay();
+    } else {
+        link.start()?;
+    }
+    let _ = app.emit("settings-changed", updated);
+    log::line("phone link: set up from a phone");
+    let running = link.running.lock().unwrap();
+    let r = running.as_ref().ok_or("the phone link is off")?;
+    let pairing = pairing_of(&link, r)?;
+    Ok((pairing.link, pairing.name))
 }
 
 // ── Session details for the phone: the switch (Settings → Android phone) ──

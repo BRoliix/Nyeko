@@ -120,7 +120,7 @@ impl std::fmt::Debug for Credentials {
     }
 }
 
-fn random_bytes<const N: usize>() -> Result<[u8; N], String> {
+pub(super) fn random_bytes<const N: usize>() -> Result<[u8; N], String> {
     use ring::rand::{SecureRandom, SystemRandom};
     let mut bytes = [0u8; N];
     SystemRandom::new().fill(&mut bytes).map_err(|_| "no secure random source".to_string())?;
@@ -261,11 +261,11 @@ pub fn start(shared: Arc<Shared>, target: Target, creds: Credentials) -> Handle 
     Handle { task, status }
 }
 
-trait Io: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {}
+pub(super) trait Io: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {}
 impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send> Io for T {}
-type Ws = WebSocketStream<Box<dyn Io>>;
+pub(super) type Ws = WebSocketStream<Box<dyn Io>>;
 
-enum Failure {
+pub(super) enum Failure {
     Refused,
     Unreachable,
     TooMany,
@@ -327,6 +327,13 @@ fn tls_config() -> Arc<ClientConfig> {
 }
 
 async fn connect(target: &Target, creds: &Credentials) -> Result<Ws, Failure> {
+    let path = format!("/v1/room/{}?role=pc", creds.room);
+    let protocols = format!("coucou.v1, coucou.join.{}", crypto::join_proof(&creds.key));
+    open_socket(target, &path, Some(&creds.access), &protocols, crypto::MAX_FRAME + 1024).await
+}
+
+/// One WebSocket to the relay at `path` (with the access key when given), through the same TLS as the rooms.
+pub(super) async fn open_socket(target: &Target, path: &str, access: Option<&str>, protocols: &str, max: usize) -> Result<Ws, Failure> {
     let attempt = async {
         let tcp = TcpStream::connect((target.host.trim_matches(['[', ']']), target.port)).await.map_err(|_| Failure::Unreachable)?;
         let _ = tcp.set_nodelay(true);
@@ -336,16 +343,15 @@ async fn connect(target: &Target, creds: &Credentials) -> Result<Ws, Failure> {
         } else {
             Box::new(tcp)
         };
-        let url = format!("{}://{}:{}/v1/room/{}?role=pc", if target.tls { "wss" } else { "ws" }, target.host, target.port, creds.room);
+        let url = format!("{}://{}:{}{}", if target.tls { "wss" } else { "ws" }, target.host, target.port, path);
         let mut request = url.into_client_request().map_err(|_| Failure::Unreachable)?;
         let headers = request.headers_mut();
         let bad = |_| Failure::Unreachable;
-        headers.insert("Authorization", format!("Bearer {}", creds.access).parse().map_err(bad)?);
-        headers.insert(
-            "Sec-WebSocket-Protocol",
-            format!("coucou.v1, coucou.join.{}", crypto::join_proof(&creds.key)).parse().map_err(bad)?,
-        );
-        let config = WebSocketConfig::default().max_message_size(Some(crypto::MAX_FRAME + 1024)).max_frame_size(Some(crypto::MAX_FRAME + 1024));
+        if let Some(access) = access {
+            headers.insert("Authorization", format!("Bearer {access}").parse().map_err(bad)?);
+        }
+        headers.insert("Sec-WebSocket-Protocol", protocols.parse().map_err(bad)?);
+        let config = WebSocketConfig::default().max_message_size(Some(max)).max_frame_size(Some(max));
         match tokio_tungstenite::client_async_with_config(request, stream, Some(config)).await {
             Ok((ws, _)) => Ok(ws),
             Err(tokio_tungstenite::tungstenite::Error::Http(response)) => Err(match response.status().as_u16() {

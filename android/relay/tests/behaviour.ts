@@ -24,6 +24,7 @@ export interface Options {
   key?: string | null; // null: no Authorization header
   protocols?: string; // the whole Sec-WebSocket-Protocol offer
   proof?: string; // join proof only (builds the offer)
+  setup?: boolean; // a setup room (/v1/setup/…) instead of a link room
 }
 
 export interface Harness {
@@ -234,6 +235,40 @@ export function behaviour(name: string, make: () => Promise<Harness>) {
       } finally {
         await h.setAccessKey(ACCESS);
       }
+    });
+
+    it("opens setup rooms without the access key, for a few small frames only", async () => {
+      const room = randomRoom();
+      const pc = await open(h, room, "pc", { key: null, proof: P1, setup: true });
+      const phone = await open(h, room, "phone", { key: null, proof: P1, setup: true });
+      expect(await pc.next()).toEqual({ kind: "text", data: '{"peer":"online"}' });
+      expect(await phone.next()).toEqual({ kind: "text", data: '{"peer":"online"}' });
+      phone.send(new Uint8Array(4096).fill(1));
+      const got = await pc.next();
+      expect(got.kind === "binary" && got.data.length).toBe(4096);
+      pc.send(new Uint8Array([2]));
+      expect(await phone.next()).toEqual({ kind: "binary", data: new Uint8Array([2]) });
+      for (let i = 0; i < 3; i++) phone.send(new Uint8Array([3]));
+      for (let i = 0; i < 3; i++) expect(await pc.next()).toEqual({ kind: "binary", data: new Uint8Array([3]) });
+      phone.send(new Uint8Array([4])); // the fifth
+      expect(await phone.next()).toEqual({ kind: "close", code: 1008, reason: "setup limit" });
+    });
+
+    it("closes a setup socket that sends more than 4 KB (1009)", async () => {
+      const room = randomRoom();
+      const pc = await open(h, room, "pc", { key: null, proof: P1, setup: true });
+      pc.send(new Uint8Array(4097));
+      const m = await pc.next();
+      expect(m.kind === "close" && m.code).toBe(1009);
+    });
+
+    it("keeps setup rooms apart from link rooms, and link rooms still need the key", async () => {
+      const room = randomRoom();
+      const setup = await open(h, room, "pc", { key: null, proof: P1, setup: true });
+      expect(await h.connect(room, "phone", { key: null, proof: P1 })).toEqual({ refused: 401 });
+      const link = await open(h, room, "phone", { proof: P1 });
+      expect(await setup.quiet(200)).toBe(true);
+      expect(await link.quiet(100)).toBe(true);
     });
   });
 }

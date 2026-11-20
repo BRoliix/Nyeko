@@ -56,7 +56,7 @@ const harness = async (): Promise<Harness> => {
       const headers: Record<string, string> = {};
       if (o.key !== null) headers.Authorization = `Bearer ${o.key ?? ACCESS}`;
       return new Promise((resolve) => {
-        const ws = new WebSocket(`ws://${base}/v1/room/${room}?role=${role}`, protocols ? protocols.split(",").map((s) => s.trim()).filter(Boolean) : [], { headers });
+        const ws = new WebSocket(`ws://${base}/v1/${o.setup ? "setup" : "room"}/${room}?role=${role}`, protocols ? protocols.split(",").map((s) => s.trim()).filter(Boolean) : [], { headers });
         ws.on("unexpected-response", (_req, res) => {
           resolve({ refused: res.statusCode ?? 0 });
           ws.terminate();

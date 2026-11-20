@@ -51,7 +51,7 @@ async function upgrade(room: string, role: string, o: Options = {}): Promise<Res
   if (o.key !== null) headers.Authorization = `Bearer ${o.key ?? ACCESS}`;
   const protocols = o.protocols ?? offer(o.proof ?? proofOf(1));
   if (protocols) headers["Sec-WebSocket-Protocol"] = protocols;
-  return exports.default.fetch(`https://relay.test/v1/room/${room}?role=${role}`, { headers });
+  return exports.default.fetch(`https://relay.test/v1/${o.setup ? "setup" : "room"}/${room}?role=${role}`, { headers });
 }
 
 const harness = async (): Promise<Harness> => ({

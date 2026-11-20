@@ -7,8 +7,8 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./index";
 import {
-  Bucket, MAX_FRAME, PEER_OFFLINE, PEER_ONLINE, RATE_BURST, RATE_PER_SECOND, SUBPROTOCOL,
-  accessGeneration, joinVerifier, otherRole, parseJoinProof, parseRoomRequest,
+  Bucket, MAX_FRAME, MAX_SETUP_FRAME, PEER_OFFLINE, PEER_ONLINE, RATE_BURST, RATE_PER_SECOND, SETUP_FRAMES, SETUP_TTL_MS,
+  SUBPROTOCOL, accessGeneration, joinVerifier, otherRole, parseJoinProof, parseRoomRequest,
   type Role,
 } from "./protocol";
 
@@ -17,6 +17,10 @@ interface Attachment {
   verifier: string;
   gen: string;
   replaced?: boolean;
+  /** A setup room's socket: no access key, a few small frames, a short life. */
+  setup?: boolean;
+  frames?: number;
+  since?: number;
 }
 
 const OPEN = 1;
@@ -37,7 +41,7 @@ export class Room extends DurableObject<Env> {
     if (!target || !proof || request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response(null, { status: 400 });
 
     const verifier = await joinVerifier(proof);
-    const gen = await accessGeneration(this.env.ACCESS_KEY);
+    const gen = target.setup ? "" : await accessGeneration(this.env.ACCESS_KEY);
     const live = this.live();
     const wrongProof = live.length > 0 && attachmentOf(live[0]).verifier !== verifier;
 
@@ -60,7 +64,9 @@ export class Room extends DurableObject<Env> {
     }
 
     this.ctx.acceptWebSocket(server, [target.role]);
-    server.serializeAttachment({ role: target.role, verifier, gen } satisfies Attachment);
+    server.serializeAttachment((target.setup
+      ? { role: target.role, verifier, gen, setup: true, frames: 0, since: Date.now() }
+      : { role: target.role, verifier, gen }) satisfies Attachment);
     if (this.peerOf(target.role, server)) {
       server.send(PEER_ONLINE);
       this.peerOf(target.role, server)?.send(PEER_ONLINE);
@@ -70,6 +76,17 @@ export class Room extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const att = attachmentOf(ws);
+    if (att.setup) {
+      const frames = (att.frames ?? 0) + 1;
+      if (Date.now() - (att.since ?? 0) > SETUP_TTL_MS) return ws.close(1008, "expired");
+      if (typeof message === "string") return ws.close(1003, "binary only");
+      if (message.byteLength > MAX_SETUP_FRAME) return ws.close(1009, "too big");
+      if (frames > SETUP_FRAMES) return ws.close(1008, "setup limit");
+      ws.serializeAttachment({ ...att, frames } satisfies Attachment);
+      const peer = this.peerOf(att.role, ws);
+      if (!peer) return ws.send(PEER_OFFLINE);
+      return peer.send(message);
+    }
     // The key the socket was admitted under must still be the configured one (rotation closes live sockets here).
     if (!att.gen || att.gen !== (await accessGeneration(this.env.ACCESS_KEY))) {
       ws.close(1008, "access key changed");

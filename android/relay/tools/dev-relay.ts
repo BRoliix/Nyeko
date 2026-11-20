@@ -12,8 +12,8 @@ import { pathToFileURL } from "node:url";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket } from "ws";
 import {
-  Bucket, MAX_FRAME, PEER_OFFLINE, PEER_ONLINE, RATE_BURST, RATE_PER_SECOND, SUBPROTOCOL,
-  accessGeneration, accessKeyOk, joinVerifier, otherRole, parseJoinProof, parseRoomRequest,
+  Bucket, MAX_FRAME, MAX_SETUP_FRAME, PEER_OFFLINE, PEER_ONLINE, RATE_BURST, RATE_PER_SECOND, SETUP_FRAMES, SETUP_TTL_MS,
+  SUBPROTOCOL, accessGeneration, accessKeyOk, joinVerifier, otherRole, parseJoinProof, parseRoomRequest, roomName,
   type Role,
 } from "../src/protocol.ts";
 
@@ -24,6 +24,9 @@ interface Peer {
   gen: string;
   bucket: Bucket;
   replaced: boolean;
+  setup: boolean;
+  frames: number;
+  since: number;
 }
 
 export interface Relay {
@@ -69,15 +72,16 @@ export async function startRelay(options: { port?: number; host?: string; access
       if (recent.length >= options.connectsPerMinute) return refuse(socket, 429, "Too Many Requests");
       connects.set(ip, [...recent, now]);
     }
-    if (!(await accessKeyOk(accessKey, req.headers.authorization ?? null,
+    if (!target.setup && !(await accessKeyOk(accessKey, req.headers.authorization ?? null,
                             (req.headers["sec-websocket-protocol"] as string | undefined) ?? null))) return refuse(socket, 401, "Unauthorized");
     const proof = parseJoinProof((req.headers["sec-websocket-protocol"] as string | undefined) ?? null);
     if (!proof) return refuse(socket, 400, "Bad Request");
     const verifier = await joinVerifier(proof);
-    const gen = await accessGeneration(accessKey);
+    const gen = target.setup ? "" : await accessGeneration(accessKey);
+    const name = roomName(target);
 
     wss.handleUpgrade(req, socket, head, (ws) => {
-      const room = rooms.get(target.room) ?? {};
+      const room = rooms.get(name) ?? {};
       const live = (Object.values(room).filter((v) => typeof v === "object") as Peer[]).filter((p) => !p.replaced);
       if (live.length > 0 && live[0].verifier !== verifier) {
         ws.close(1008, "join proof");
@@ -88,9 +92,10 @@ export async function startRelay(options: { port?: number; host?: string; access
         old.replaced = true;
         old.ws.close(1000, "replaced");
       }
-      const me: Peer = { ws, role: target.role, verifier, gen, bucket: new Bucket(RATE_PER_SECOND, RATE_BURST), replaced: false };
+      const me: Peer = { ws, role: target.role, verifier, gen, bucket: new Bucket(RATE_PER_SECOND, RATE_BURST), replaced: false,
+        setup: target.setup, frames: 0, since: Date.now() };
       room[target.role] = me;
-      rooms.set(target.room, room);
+      rooms.set(name, room);
       const peer = room[otherRole(target.role)];
       if (peer && !peer.replaced && peer.ws.readyState === peer.ws.OPEN) {
         ws.send(PEER_ONLINE);
@@ -98,6 +103,17 @@ export async function startRelay(options: { port?: number; host?: string; access
       }
 
       const onMessage = async (data: WebSocket.RawData, isBinary: boolean) => {
+        if (me.setup) {
+          if (!isBinary && data.toString() === "ping") return ws.send("pong");
+          if (Date.now() - me.since > SETUP_TTL_MS) return ws.close(1008, "expired");
+          if (!isBinary) return ws.close(1003, "binary only");
+          const f = Buffer.isBuffer(data) ? data : Buffer.concat(data as Buffer[]);
+          if (f.length > MAX_SETUP_FRAME) return ws.close(1009, "too big");
+          if (++me.frames > SETUP_FRAMES) return ws.close(1008, "setup limit");
+          const o = room[otherRole(me.role)];
+          if (!o || o.replaced || o.ws.readyState !== o.ws.OPEN) return ws.send(PEER_OFFLINE);
+          return o.ws.send(f, { binary: true });
+        }
         if ((await accessGeneration(accessKey)) !== me.gen || !me.gen) return ws.close(1008, "access key changed");
         if (!isBinary) {
           if (data.toString() === "ping") return ws.send("pong"); // the platform's auto-response in the Worker
@@ -118,7 +134,7 @@ export async function startRelay(options: { port?: number; host?: string; access
 
       const left = () => {
         if (room[me.role] === me) delete room[me.role];
-        if (!room.pc && !room.phone) rooms.delete(target.room);
+        if (!room.pc && !room.phone) rooms.delete(name);
         if (me.replaced) return;
         const other = room[otherRole(me.role)];
         if (other && !other.replaced && other.ws.readyState === other.ws.OPEN) other.ws.send(PEER_OFFLINE);

@@ -16,14 +16,26 @@ const ACCESS_PREFIX = "coucou.access.";
 export type Role = "pc" | "phone";
 export const otherRole = (r: Role): Role => (r === "pc" ? "phone" : "pc");
 
-/** `/v1/room/<22 chars>` with `?role=pc|phone`, or null (the caller answers 404 and touches nothing). */
-export function parseRoomRequest(url: URL): { room: string; role: Role } | null {
-  const m = /^\/v1\/room\/([^/]+)$/.exec(url.pathname);
-  if (!m || !ROOM_ID.test(m[1])) return null;
+/** Setup rooms (`/v1/setup/<22 chars>`, Nyeko): how a new computer gets the relay's address and access key from a phone
+ *  that already has them, by scanning a QR code. They need no access key, so they carry almost nothing: a few frames of
+ *  at most 4 KB per socket, for 15 minutes. What crosses is end-to-end encrypted to a key that only the QR code holds
+ *  (docs/RELAY_SETUP.md); the relay sees opaque bytes, as in a link room. */
+export const MAX_SETUP_FRAME = 4096;
+export const SETUP_FRAMES = 4;
+export const SETUP_TTL_MS = 15 * 60_000;
+
+/** `/v1/room/<22 chars>` (a link room) or `/v1/setup/<22 chars>` (a setup room) with `?role=pc|phone`, or null (the caller
+ *  answers 404 and touches nothing). */
+export function parseRoomRequest(url: URL): { room: string; role: Role; setup: boolean } | null {
+  const m = /^\/v1\/(room|setup)\/([^/]+)$/.exec(url.pathname);
+  if (!m || !ROOM_ID.test(m[2])) return null;
   const role = url.searchParams.get("role");
   if (role !== "pc" && role !== "phone") return null;
-  return { room: m[1], role };
+  return { room: m[2], role, setup: m[1] === "setup" };
 }
+
+/** The Durable Object name of a room: setup rooms live apart from link rooms. */
+export const roomName = (t: { room: string; setup: boolean }) => (t.setup ? `setup:${t.room}` : t.room);
 
 /** The access key from `Authorization: Bearer …`, or null. */
 export function bearer(header: string | null): string | null {

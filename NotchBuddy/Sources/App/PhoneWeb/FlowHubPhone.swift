@@ -6,6 +6,7 @@ import SwiftUI
 /// Nyeko window → Phone: the relay, the switch, pairing (QR + copy), lock-screen alerts.
 struct HubPhonePage: View {
     @ObservedObject private var phone = NyekoPhoneService.shared
+    @ObservedObject private var setup = NyekoSetupOffer.shared
     @State private var relay = NyekoPhoneService.shared.relayURL
     @State private var webApp = NyekoPhoneService.shared.webAppURL
     @State private var access = ""
@@ -18,6 +19,7 @@ struct HubPhonePage: View {
         HubPageScaffold(title: String(localized: "Phone"),
                         subtitle: String(localized: "Nyeko in your pocket, through your own relay.")) {
             statusCard
+            if needsSetup || setupDone { setupCard }
             HubCard {
                 HubLabel(String(localized: "1 · Your relay"))
                 Text("The relay is a tiny Cloudflare Worker on your account (android/relay in the repo). It forwards encrypted frames and can read none of them.")
@@ -77,6 +79,66 @@ struct HubPhonePage: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: Set up from the phone (NyekoSetup.swift)
+
+    private var needsSetup: Bool { phone.relayURL.isEmpty || !phone.hasAccessKey }
+    private var setupDone: Bool { if case .done = setup.state { return true } else { return false } }
+
+    private var setupCard: some View {
+        HubCard {
+            HubLabel(String(localized: "Set up with your phone"))
+            switch setup.state {
+            case .done(let name):
+                Text("Set up by \(name). Your phone has added this Mac.")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundColor(HubTheme.green)
+            default:
+                HStack(alignment: .top, spacing: 18) {
+                    if let link = setup.link, let qr = Self.qr(link) {
+                        Image(nsImage: qr)
+                            .interpolation(.none)
+                            .resizable()
+                            .frame(width: 200, height: 200)
+                            .padding(8)
+                            .background(Color.white)
+                            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(HubTheme.ink, lineWidth: 2))
+                            .accessibilityLabel(String(localized: "Setup QR code"))
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Scan this code with a phone where Nyeko already works: it sends this Mac the relay and its key, and adds the Mac. Nothing to type here.")
+                            .font(.system(size: 13))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("On an iPhone: scan with the Camera, tap Copy pairing code, then paste it in Nyeko on the Home Screen.")
+                            .font(.system(size: 12.5))
+                            .foregroundColor(HubTheme.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        switch setup.state {
+                        case .waiting:
+                            Text("Waiting for your phone…").font(.system(size: 12.5, weight: .bold)).foregroundColor(HubTheme.secondary)
+                        case .failed(let why):
+                            Text(why).font(.system(size: 12.5, weight: .bold)).foregroundColor(HubTheme.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                        default:
+                            EmptyView()
+                        }
+                        Button(String(localized: "Show a new code")) { setup.start() }
+                            .buttonStyle(HubButtonStyle())
+                        Text("Or enter the relay by hand below (needed once, on your first computer).")
+                            .font(.system(size: 11.5))
+                            .foregroundColor(HubTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .onAppear { if needsSetup && setup.state == .idle { setup.start() } }
+        .onDisappear { if setup.state == .waiting { setup.stop() } }
+        .onChange(of: setup.state) { _, state in
+            // The phone set the relay: show it in the field below (which would otherwise write its old value back).
+            if case .done = state { relay = phone.relayURL }
         }
     }
 

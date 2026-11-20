@@ -8072,6 +8072,21 @@
    "ko": "Ollama 연결이 끊겼어요.",
    "ja": "Ollama を切断しました。"
   },
+  "On an iPhone: scan with the Camera, tap Copy pairing code, then paste it in Nyeko on the Home Screen.": {
+   "zh-Hans": "在 iPhone 上：用相机扫描，轻点“拷贝配对码”，然后粘贴到主屏幕上的 Nyeko 中。",
+   "hi": "iPhone पर: कैमरा से स्कैन करें, Copy pairing code पर टैप करें, फिर होम स्क्रीन वाले Nyeko में पेस्ट करें।",
+   "es": "En un iPhone: escanéalo con la Cámara, toca Copiar código de vinculación y pégalo en Nyeko desde la pantalla de inicio.",
+   "ar": "على iPhone: امسح الرمز بالكاميرا، واضغط «نسخ رمز الإقران»، ثم الصقه في Nyeko على الشاشة الرئيسية.",
+   "fr": "Sur iPhone : scanne avec l’appareil photo, touche Copier le code d’appairage, puis colle-le dans Nyeko depuis l’écran d’accueil.",
+   "bn": "iPhone-এ: ক্যামেরা দিয়ে স্ক্যান করুন, Copy pairing code ট্যাপ করুন, তারপর হোম স্ক্রিনের Nyeko-তে পেস্ট করুন।",
+   "pt-BR": "No iPhone: escaneie com a Câmera, toque em Copiar código de pareamento e cole no Nyeko da Tela de Início.",
+   "ru": "На iPhone: отсканируйте Камерой, нажмите «Скопировать код сопряжения» и вставьте его в Nyeko на экране «Домой».",
+   "id": "Di iPhone: pindai dengan Kamera, ketuk Salin kode pemasangan, lalu tempelkan di Nyeko dari Layar Utama.",
+   "de": "Auf dem iPhone: mit der Kamera scannen, auf „Kopplungscode kopieren“ tippen und ihn in Nyeko auf dem Home-Bildschirm einfügen.",
+   "tr": "iPhone'da: Kamera ile tara, Eşleme kodunu kopyala'ya dokun, sonra ana ekrandaki Nyeko'ya yapıştır.",
+   "ko": "iPhone에서는 카메라로 스캔하고 페어링 코드 복사를 탭한 다음, 홈 화면의 Nyeko에 붙여 넣으세요.",
+   "ja": "iPhone の場合：カメラでスキャンし、「ペアリングコードをコピー」をタップして、ホーム画面の Nyeko に貼り付けます。"
+  },
   "On-device when your Mac supports it, nothing to download.": {
    "zh-Hans": "Mac 支持时在设备上完成，无需下载。",
    "hi": "Mac समर्थन करे तो डिवाइस पर ही, कुछ डाउनलोड नहीं करना।",
@@ -8761,6 +8776,21 @@
    "tr": "Terminalini projede açar, Claude Code ve senin sözlerinle.",
    "ko": "프로젝트에서 터미널을 열고 Claude Code에 내 말을 전합니다.",
    "ja": "プロジェクトでターミナルを開き、Claude Code にあなたの言葉を渡します。"
+  },
+  "Or enter the relay by hand below (needed once, on your first computer).": {
+   "zh-Hans": "或在下方手动填写中继（只需一次，在你的第一台电脑上）。",
+   "hi": "या नीचे रिले खुद भरें (बस एक बार, अपने पहले कंप्यूटर पर)।",
+   "es": "O escribe el relé a mano abajo (solo una vez, en tu primer ordenador).",
+   "ar": "أو أدخل المُرحِّل يدويًا أدناه (مرة واحدة فقط، على أول جهاز كمبيوتر).",
+   "fr": "Ou saisis le relais à la main ci-dessous (une seule fois, sur ton premier ordinateur).",
+   "bn": "অথবা নিচে হাতে রিলে লিখুন (শুধু একবার, আপনার প্রথম কম্পিউটারে)।",
+   "pt-BR": "Ou digite o relay abaixo (só uma vez, no seu primeiro computador).",
+   "ru": "Или введите ретранслятор вручную ниже (нужно один раз, на первом компьютере).",
+   "id": "Atau masukkan relay secara manual di bawah (cukup sekali, di komputer pertamamu).",
+   "de": "Oder trage das Relay unten von Hand ein (nur einmal nötig, auf deinem ersten Computer).",
+   "tr": "Ya da aktarıcıyı aşağıya elle gir (yalnızca bir kez, ilk bilgisayarında).",
+   "ko": "또는 아래에 릴레이를 직접 입력하세요(첫 번째 컴퓨터에서 한 번만 필요).",
+   "ja": "または、下でリレーを手入力します（最初のコンピュータで一度だけ必要です）。"
   },
   "Or into a session": {
    "zh-Hans": "或放进一个会话",
@@ -10712,6 +10742,21 @@
    "ko": "Android용 Nyeko로 이 코드를 스캔하거나 링크를 앱에 붙여넣으세요.",
    "ja": "このコードを Nyeko for Android でスキャンするか、リンクをアプリに貼り付けてください。"
   },
+  "Scan this code with a phone where Nyeko already works: it sends this Mac the relay and its key, and adds the Mac. Nothing to type here.": {
+   "zh-Hans": "用已经在使用 Nyeko 的手机扫描此码：它会把中继和密钥发给这台 Mac，并添加这台 Mac。这里无需输入任何内容。",
+   "hi": "इस कोड को उस फ़ोन से स्कैन करें जिसमें Nyeko पहले से चल रहा है: वह इस Mac को रिले और उसकी कुंजी भेजता है और Mac जोड़ देता है। यहाँ कुछ टाइप नहीं करना है।",
+   "es": "Escanea este código con un teléfono donde Nyeko ya funcione: envía a este Mac el relé y su clave, y añade el Mac. No hay que escribir nada aquí.",
+   "ar": "امسح هذا الرمز بهاتف يعمل عليه Nyeko بالفعل: يرسل إلى جهاز Mac هذا عنوان المُرحِّل ومفتاحه، ويضيف الـ Mac. لا حاجة لكتابة أي شيء هنا.",
+   "fr": "Scanne ce code avec un téléphone où Nyeko fonctionne déjà : il envoie à ce Mac le relais et sa clé, puis ajoute le Mac. Rien à taper ici.",
+   "bn": "যে ফোনে Nyeko আগে থেকেই চলছে সেটি দিয়ে এই কোডটি স্ক্যান করুন: এটি এই Mac-এ রিলে ও তার কী পাঠায় এবং Mac-টি যোগ করে। এখানে কিছুই টাইপ করতে হবে না।",
+   "pt-BR": "Escaneie este código com um celular em que o Nyeko já funciona: ele envia a este Mac o relay e a chave dele e adiciona o Mac. Nada para digitar aqui.",
+   "ru": "Отсканируйте этот код телефоном, на котором Nyeko уже работает: он передаст этому Mac адрес ретранслятора и ключ и добавит Mac. Здесь ничего вводить не нужно.",
+   "id": "Pindai kode ini dengan ponsel yang sudah menjalankan Nyeko: ponsel mengirim relay dan kuncinya ke Mac ini, lalu menambahkan Mac. Tidak ada yang perlu diketik di sini.",
+   "de": "Scanne diesen Code mit einem Handy, auf dem Nyeko schon läuft: Es schickt diesem Mac das Relay und seinen Schlüssel und fügt den Mac hinzu. Hier musst du nichts eintippen.",
+   "tr": "Bu kodu Nyeko'nun zaten çalıştığı bir telefonla tara: bu Mac'e aktarıcıyı ve anahtarını gönderir, Mac'i ekler. Burada bir şey yazmana gerek yok.",
+   "ko": "Nyeko가 이미 작동하는 휴대폰으로 이 코드를 스캔하세요. 이 Mac에 릴레이와 키를 보내고 Mac을 추가합니다. 여기서 입력할 것은 없습니다.",
+   "ja": "Nyeko がすでに動いているスマートフォンでこのコードをスキャンしてください。リレーとそのキーがこの Mac に送られ、Mac が追加されます。ここで入力するものはありません。"
+  },
   "Scarf": {
    "zh-Hans": "围巾",
    "hi": "मफ़लर",
@@ -11147,6 +11192,36 @@
    "ko": "먼저 릴레이 주소와 액세스 키를 설정하세요",
    "ja": "先にリレーのアドレスとアクセスキーを設定してください"
   },
+  "Set up by {0}. Your phone has added this Mac.": {
+   "zh-Hans": "已由 {0} 设置。你的手机已添加这台 Mac。",
+   "hi": "{0} ने सेट अप किया। आपके फ़ोन ने यह Mac जोड़ लिया है।",
+   "es": "Configurado por {0}. Tu teléfono ha añadido este Mac.",
+   "ar": "تم الإعداد بواسطة {0}. أضاف هاتفك جهاز Mac هذا.",
+   "fr": "Configuré par {0}. Ton téléphone a ajouté ce Mac.",
+   "bn": "{0} দিয়ে সেট আপ হয়েছে। আপনার ফোন এই Mac যোগ করেছে।",
+   "pt-BR": "Configurado por {0}. Seu celular adicionou este Mac.",
+   "ru": "Настроено с {0}. Телефон добавил этот Mac.",
+   "id": "Disiapkan oleh {0}. Ponselmu sudah menambahkan Mac ini.",
+   "de": "Eingerichtet von {0}. Dein Handy hat diesen Mac hinzugefügt.",
+   "tr": "{0} ile kuruldu. Telefonun bu Mac'i ekledi.",
+   "ko": "{0}에서 설정했습니다. 휴대폰에 이 Mac이 추가되었습니다.",
+   "ja": "{0} で設定しました。スマートフォンにこの Mac が追加されました。"
+  },
+  "Set up with your phone": {
+   "zh-Hans": "用手机设置",
+   "hi": "अपने फ़ोन से सेट अप करें",
+   "es": "Configurar con tu teléfono",
+   "ar": "الإعداد عبر هاتفك",
+   "fr": "Configurer avec ton téléphone",
+   "bn": "আপনার ফোন দিয়ে সেট আপ করুন",
+   "pt-BR": "Configurar com o seu celular",
+   "ru": "Настроить с телефона",
+   "id": "Siapkan dengan ponselmu",
+   "de": "Mit deinem Handy einrichten",
+   "tr": "Telefonunla kur",
+   "ko": "휴대폰으로 설정",
+   "ja": "スマートフォンで設定"
+  },
   "Settings": {
    "zh-Hans": "设置",
    "hi": "सेटिंग्स",
@@ -11206,6 +11281,21 @@
    "tr": "Ayarlar…",
    "ko": "설정…",
    "ja": "設定…"
+  },
+  "Setup QR code": {
+   "zh-Hans": "设置二维码",
+   "hi": "सेटअप QR कोड",
+   "es": "Código QR de configuración",
+   "ar": "رمز QR للإعداد",
+   "fr": "QR code de configuration",
+   "bn": "সেটআপ QR কোড",
+   "pt-BR": "Código QR de configuração",
+   "ru": "QR-код для настройки",
+   "id": "Kode QR penyiapan",
+   "de": "QR-Code zur Einrichtung",
+   "tr": "Kurulum QR kodu",
+   "ko": "설정 QR 코드",
+   "ja": "設定用 QR コード"
   },
   "Share image": {
    "zh-Hans": "分享图片",
@@ -11326,6 +11416,21 @@
    "tr": "Nyo'yu göster:",
    "ko": "Nyo를 표시할 화면",
    "ja": "Nyo を表示する場所"
+  },
+  "Show a new code": {
+   "zh-Hans": "显示新代码",
+   "hi": "नया कोड दिखाएँ",
+   "es": "Mostrar un código nuevo",
+   "ar": "اعرض رمزًا جديدًا",
+   "fr": "Afficher un nouveau code",
+   "bn": "নতুন কোড দেখান",
+   "pt-BR": "Mostrar um novo código",
+   "ru": "Показать новый код",
+   "id": "Tampilkan kode baru",
+   "de": "Neuen Code zeigen",
+   "tr": "Yeni kod göster",
+   "ko": "새 코드 표시",
+   "ja": "新しいコードを表示"
   },
   "Show approval requests in the notch": {
    "zh-Hans": "在刘海中显示审批请求",
@@ -12287,6 +12392,21 @@
    "ko": "아일랜드에 표시되는 Claude와 Codex 사용량입니다.",
    "ja": "アイランドに表示される Claude と Codex の使用量です。"
   },
+  "The Mac saved the settings but could not make its pairing code.": {
+   "zh-Hans": "Mac 已保存设置，但无法生成配对码。",
+   "hi": "Mac ने सेटिंग्स सहेज लीं, पर पेयरिंग कोड नहीं बना सका।",
+   "es": "El Mac guardó los ajustes pero no pudo crear su código de vinculación.",
+   "ar": "حفظ الـ Mac الإعدادات لكنه لم يتمكن من إنشاء رمز الإقران.",
+   "fr": "Le Mac a enregistré les réglages mais n’a pas pu créer son code d’appairage.",
+   "bn": "Mac সেটিংস সংরক্ষণ করেছে কিন্তু পেয়ারিং কোড তৈরি করতে পারেনি।",
+   "pt-BR": "O Mac salvou os ajustes, mas não conseguiu criar o código de pareamento.",
+   "ru": "Mac сохранил настройки, но не смог создать код сопряжения.",
+   "id": "Mac menyimpan pengaturan tetapi tidak dapat membuat kode pemasangannya.",
+   "de": "Der Mac hat die Einstellungen gespeichert, konnte aber keinen Kopplungscode erstellen.",
+   "tr": "Mac ayarları kaydetti ama eşleme kodunu oluşturamadı.",
+   "ko": "Mac이 설정을 저장했지만 페어링 코드를 만들지 못했습니다.",
+   "ja": "Mac は設定を保存しましたが、ペアリングコードを作成できませんでした。"
+  },
   "The Notetaker": {
    "zh-Hans": "会议笔记",
    "hi": "Notetaker",
@@ -12301,6 +12421,21 @@
    "tr": "Not alıcı",
    "ko": "노트테이커",
    "ja": "ノートテイカー"
+  },
+  "The access key sent by the phone is not valid.": {
+   "zh-Hans": "手机发送的访问密钥无效。",
+   "hi": "फ़ोन से भेजी गई एक्सेस कुंजी सही नहीं है।",
+   "es": "La clave de acceso enviada por el teléfono no es válida.",
+   "ar": "مفتاح الوصول الذي أرسله الهاتف غير صالح.",
+   "fr": "La clé d’accès envoyée par le téléphone n’est pas valide.",
+   "bn": "ফোনের পাঠানো অ্যাক্সেস কী সঠিক নয়।",
+   "pt-BR": "A chave de acesso enviada pelo celular não é válida.",
+   "ru": "Ключ доступа, присланный телефоном, неверен.",
+   "id": "Kunci akses yang dikirim ponsel tidak valid.",
+   "de": "Der vom Handy gesendete Zugangsschlüssel ist ungültig.",
+   "tr": "Telefonun gönderdiği erişim anahtarı geçerli değil.",
+   "ko": "휴대폰이 보낸 액세스 키가 올바르지 않습니다.",
+   "ja": "スマートフォンから送られたアクセスキーが正しくありません。"
   },
   "The answer was too long and was cut.": {
    "zh-Hans": "回答过长，已被截断。",
@@ -12346,6 +12481,21 @@
    "tr": "Düzenleme Claude'u kullanır: Claude Code üzerinden Claude planın ya da Claude anahtarın. Birini Ayarlar → Sohbet bölümünden ayarla.",
    "ko": "다듬기에는 Claude가 필요해요. Claude Code로 쓰는 Claude 요금제나 Claude 키 중 하나를 설정 → 채팅에서 설정해 주세요.",
    "ja": "整える機能は Claude を使います。Claude Code 経由の Claude プラン、または Claude のキーです。設定 → チャットでどちらかを設定してください。"
+  },
+  "The code expired. Show a new one.": {
+   "zh-Hans": "代码已过期。请显示新的代码。",
+   "hi": "कोड की समय-सीमा खत्म हो गई। नया दिखाएँ।",
+   "es": "El código ha caducado. Muestra uno nuevo.",
+   "ar": "انتهت صلاحية الرمز. اعرض رمزًا جديدًا.",
+   "fr": "Le code a expiré. Affiche-en un nouveau.",
+   "bn": "কোডের মেয়াদ শেষ। নতুন একটি দেখান।",
+   "pt-BR": "O código expirou. Mostre um novo.",
+   "ru": "Срок действия кода истёк. Покажите новый.",
+   "id": "Kode sudah kedaluwarsa. Tampilkan yang baru.",
+   "de": "Der Code ist abgelaufen. Zeig einen neuen.",
+   "tr": "Kodun süresi doldu. Yenisini göster.",
+   "ko": "코드가 만료되었습니다. 새 코드를 표시하세요.",
+   "ja": "コードの有効期限が切れました。新しいコードを表示してください。"
   },
   "The code holds the keys of this pairing: share it with nobody. It is cleared from the clipboard after a minute.": {
    "zh-Hans": "此码包含本次配对的密钥：请勿与任何人分享。一分钟后会从剪贴板中清除。",
@@ -12527,6 +12677,21 @@
    "ko": "이 통화 녹음이 사라졌어요.",
    "ja": "この通話の録音はもうありません。"
   },
+  "The relay address is not valid.": {
+   "zh-Hans": "中继地址无效。",
+   "hi": "रिले का पता सही नहीं है।",
+   "es": "La dirección del relé no es válida.",
+   "ar": "عنوان المُرحِّل غير صالح.",
+   "fr": "L’adresse du relais n’est pas valide.",
+   "bn": "রিলের ঠিকানাটি সঠিক নয়।",
+   "pt-BR": "O endereço do relay não é válido.",
+   "ru": "Неверный адрес ретранслятора.",
+   "id": "Alamat relay tidak valid.",
+   "de": "Die Relay-Adresse ist ungültig.",
+   "tr": "Aktarıcı adresi geçerli değil.",
+   "ko": "릴레이 주소가 올바르지 않습니다.",
+   "ja": "リレーのアドレスが正しくありません。"
+  },
   "The relay address looks wrong.": {
    "zh-Hans": "中继地址似乎有误。",
    "hi": "रिले का पता गलत लगता है।",
@@ -12541,6 +12706,36 @@
    "tr": "Aktarıcı adresi hatalı görünüyor.",
    "ko": "릴레이 주소가 잘못된 것 같아요.",
    "ja": "リレーのアドレスが正しくないようです。"
+  },
+  "The relay address sent by the phone is not valid.": {
+   "zh-Hans": "手机发送的中继地址无效。",
+   "hi": "फ़ोन से भेजा गया रिले का पता सही नहीं है।",
+   "es": "La dirección del relé enviada por el teléfono no es válida.",
+   "ar": "عنوان المُرحِّل الذي أرسله الهاتف غير صالح.",
+   "fr": "L’adresse du relais envoyée par le téléphone n’est pas valide.",
+   "bn": "ফোনের পাঠানো রিলের ঠিকানাটি সঠিক নয়।",
+   "pt-BR": "O endereço do relay enviado pelo celular não é válido.",
+   "ru": "Адрес ретранслятора, присланный телефоном, неверен.",
+   "id": "Alamat relay yang dikirim ponsel tidak valid.",
+   "de": "Die vom Handy gesendete Relay-Adresse ist ungültig.",
+   "tr": "Telefonun gönderdiği aktarıcı adresi geçerli değil.",
+   "ko": "휴대폰이 보낸 릴레이 주소가 올바르지 않습니다.",
+   "ja": "スマートフォンから送られたリレーのアドレスが正しくありません。"
+  },
+  "The relay could not be reached. Check the Mac is online, then show a new code.": {
+   "zh-Hans": "无法连接中继。请确认 Mac 已联网，然后显示新的代码。",
+   "hi": "रिले तक नहीं पहुँचा जा सका। जाँचें कि Mac ऑनलाइन है, फिर नया कोड दिखाएँ।",
+   "es": "No se pudo contactar con el relé. Comprueba que el Mac esté conectado y muestra un código nuevo.",
+   "ar": "تعذّر الوصول إلى المُرحِّل. تأكد من اتصال الـ Mac بالإنترنت، ثم اعرض رمزًا جديدًا.",
+   "fr": "Impossible de joindre le relais. Vérifie que le Mac est en ligne, puis affiche un nouveau code.",
+   "bn": "রিলেতে পৌঁছানো যায়নি। Mac অনলাইনে আছে কিনা দেখে নতুন কোড দেখান।",
+   "pt-BR": "Não foi possível alcançar o relay. Verifique se o Mac está online e mostre um novo código.",
+   "ru": "Не удалось связаться с ретранслятором. Проверьте, что Mac в сети, и покажите новый код.",
+   "id": "Relay tidak dapat dihubungi. Pastikan Mac online, lalu tampilkan kode baru.",
+   "de": "Das Relay ist nicht erreichbar. Prüfe, ob der Mac online ist, und zeig dann einen neuen Code.",
+   "tr": "Aktarıcıya ulaşılamadı. Mac'in çevrimiçi olduğunu kontrol et, sonra yeni kod göster.",
+   "ko": "릴레이에 연결할 수 없습니다. Mac이 온라인인지 확인한 후 새 코드를 표시하세요.",
+   "ja": "リレーに接続できませんでした。Mac がオンラインか確認してから、新しいコードを表示してください。"
   },
   "The relay is a tiny Cloudflare Worker on your account (android/relay in the repo). It forwards encrypted frames and can read none of them.": {
    "zh-Hans": "中继是你账户上的一个小 Cloudflare Worker（仓库中的 android/relay）。它只转发加密帧，一个也读不了。",
@@ -13501,6 +13696,21 @@
    "tr": "Claude Code'dan yanıt bekleniyor",
    "ko": "Claude Code의 답을 기다리는 중…",
    "ja": "Claude Code の応答を待っています"
+  },
+  "Waiting for your phone…": {
+   "zh-Hans": "正在等待你的手机…",
+   "hi": "आपके फ़ोन का इंतज़ार…",
+   "es": "Esperando a tu teléfono…",
+   "ar": "في انتظار هاتفك…",
+   "fr": "En attente de ton téléphone…",
+   "bn": "আপনার ফোনের অপেক্ষায়…",
+   "pt-BR": "Aguardando seu celular…",
+   "ru": "Ждём телефон…",
+   "id": "Menunggu ponselmu…",
+   "de": "Warte auf dein Handy …",
+   "tr": "Telefonun bekleniyor…",
+   "ko": "휴대폰을 기다리는 중…",
+   "ja": "スマートフォンを待っています…"
   },
   "Wardrobe": {
    "zh-Hans": "衣橱",

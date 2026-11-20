@@ -1,7 +1,7 @@
 // Settings → Android phone: the switch for the phone link and the code that
 // pairs a phone with this computer. Off until the user turns it on.
 
-import { Bridge, type PhoneChatStatus, type PhoneLinkPairing, type PhoneLinkStatus, type PhoneRelayState, type PhoneRelayStatus } from "../core/bridge";
+import { Bridge, type PhoneChatStatus, type PhoneLinkPairing, type PhoneLinkStatus, type PhoneRelayState, type PhoneRelayStatus, type PhoneSetupStatus } from "../core/bridge";
 import { modelId, modelsOf, toggleModel, usableProviders } from "../core/phone-chat";
 import { PROVIDERS, type ProviderDef } from "../core/providers";
 import type { Settings } from "../core/state";
@@ -114,11 +114,97 @@ export function phoneSection(on: boolean, makeToggle: Toggle, settings: Settings
     h("h2", {}, h("span", { text: t("iPhone and Android") })),
     h("div", { class: "hint", text: t("Nyeko on your iPhone and your Android phone: your agents' sessions, their approvals, talking to Claude, and this computer's controls (sound, lock, sleep, restart, apps). Off by default.") }),
     h("div", { class: "hint", text: t("Allow on the phone asks for the fingerprint or the screen lock. Deny does not.") }),
+    setupSlot(async () => {
+      // The phone turned the link on: the switch and what is below it follow.
+      const status = await Bridge.phoneLinkStatus();
+      switchEl.classList.toggle("on", !!status?.running);
+      switchEl.setAttribute("aria-pressed", String(!!status?.running));
+      draw(status);
+    }),
     h("div", { class: "row" }, h("label", { text: t("Phone link") }), switchEl),
     note,
     detail,
   );
   return section;
+}
+
+/**
+ * Nyeko: "Set up with your phone" (docs/RELAY_SETUP.md). While this computer has no relay, a QR code: a phone where Nyeko
+ * already works scans it and sends the relay's address and access key, encrypted to this computer, which turns the link
+ * on and answers with its pairing code; the phone adds the computer. Nothing to type. Hidden once a relay is set.
+ */
+function setupSlot(linked: () => Promise<void>): HTMLElement {
+  const slot = h("div", {});
+  void Bridge.phoneRelayStatus().then((status) => {
+    if (status && (!status.enabled || !status.hasAccess)) slot.replaceWith(setupBlock(status.url || NYEKO_RELAY, linked));
+  });
+  return slot;
+}
+
+function setupBlock(relay: string, linked: () => Promise<void>): HTMLElement {
+  const qr = h("div", { class: "qr" });
+  const state = h("div", { class: "hint", style: "font-weight:600" });
+  const again = h("button", { text: t("Show a new code") });
+  const box = h(
+    "div",
+    {},
+    h("div", { class: "row" }, h("label", { text: t("Set up with your phone") })),
+    h("div", { class: "hint", text: t("Scan this code with a phone where Nyeko already works: it sends this computer the relay and its key, and adds the computer. Nothing to type here.") }),
+    h("div", { class: "hint", text: t("On an iPhone: scan with the Camera, tap Copy pairing code, then paste it in Nyeko on the Home Screen.") }),
+    qr,
+    state,
+    h("div", { class: "row" }, again),
+    h("div", { class: "hint", text: t("Or turn on Phone link below and enter the relay by hand under Away from home Wi-Fi (needed once, on your first computer).") }),
+  );
+  let shown = "";
+  let waiting = false;
+  const show = (s: PhoneSetupStatus | null) => {
+    if (!s) return;
+    waiting = s.state === "waiting";
+    if (s.state === "done") {
+      window.clearInterval(watch);
+      box.replaceChildren(h("div", { class: "hint", style: "font-weight:600", text: t("Set up by {phone}. Your phone has added this computer.", { phone: s.phone }) }));
+      void linked();
+      return;
+    }
+    if (s.link !== shown) {
+      shown = s.link;
+      qr.innerHTML = s.qrSvg; // from Rust (qrcode crate): an SVG made only of paths
+      qr.setAttribute("aria-label", t("Setup QR code"));
+    }
+    qr.hidden = s.state !== "waiting";
+    state.style.color = s.state === "failed" ? "var(--danger, #ff6b6b)" : "";
+    state.textContent = s.state === "waiting" ? t("Waiting for your phone…") : s.state === "failed" ? setupFailure(s) : "";
+  };
+  const start = async () => {
+    try {
+      show(await Bridge.phoneSetupStart(relay));
+    } catch (err) {
+      state.textContent = String(err);
+    }
+  };
+  again.addEventListener("click", () => void start());
+  void start();
+  // Followed while the window shows it; the code is withdrawn when the page goes away.
+  const watch = window.setInterval(() => {
+    if (!box.isConnected) {
+      window.clearInterval(watch);
+      void Bridge.phoneSetupCancel();
+      return;
+    }
+    if (document.visibilityState !== "visible" || !waiting) return;
+    void Bridge.phoneSetupStatus().then(show);
+  }, 1500);
+  return box;
+}
+
+export function setupFailure(s: PhoneSetupStatus): string {
+  switch (s.reason) {
+    case "unreachable": return t("The relay could not be reached. Check this computer is online, then show a new code.");
+    case "other": return t("Something else answered this code. Show a new one.");
+    case "error": return t("This computer could not finish: {error}", { error: s.message });
+    default: return t("The code expired. Show a new one.");
+  }
 }
 
 /** What the status line says about the relay. */

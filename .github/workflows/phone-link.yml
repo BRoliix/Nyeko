@@ -82,6 +82,11 @@ jobs:
         run: npm test
       - name: Test vectors are up to date
         run: npm run vectors
+      - name: The phone web app's relay code and new-computer setup (both sides, through the Node twin)
+        working-directory: .
+        run: |
+          node phone/tests/relay.test.mjs
+          node --experimental-strip-types phone/tests/setup.test.mjs
       - name: A deploy builds (nothing is uploaded)
         env: { WRANGLER_SEND_METRICS: "false" }
         run: npx wrangler deploy --dry-run --outdir "$RUNNER_TEMP/relay-build"

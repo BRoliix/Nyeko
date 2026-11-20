@@ -7,7 +7,7 @@
 // This file answers the HTTP side and refuses everything that is not a well-formed, authorised room request BEFORE a room
 // (a Durable Object) is created or contacted.
 
-import { accessKeyOk, parseJoinProof, parseRoomRequest } from "./protocol";
+import { accessKeyOk, parseJoinProof, parseRoomRequest, roomName } from "./protocol";
 export { Room } from "./room";
 
 export interface Env {
@@ -32,10 +32,11 @@ export default {
       const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
       if (!(await env.CONNECT_LIMIT.limit({ key: ip })).success) return empty(429);
     }
-    if (!(await accessKeyOk(env.ACCESS_KEY, request.headers.get("Authorization"),
+    // A setup room needs no access key (that is what it hands over); it carries only a few small frames (room.ts).
+    if (!target.setup && !(await accessKeyOk(env.ACCESS_KEY, request.headers.get("Authorization"),
                             request.headers.get("Sec-WebSocket-Protocol")))) return empty(401);
     if (!parseJoinProof(request.headers.get("Sec-WebSocket-Protocol"))) return empty(400);
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return empty(426);
-    return env.ROOM.get(env.ROOM.idFromName(target.room)).fetch(request);
+    return env.ROOM.get(env.ROOM.idFromName(roomName(target))).fetch(request);
   },
 };
