@@ -65,6 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CloudProbe.shared.startIfEnabled()
         #endif
         #if !APPSTORE
+        // The relay address and the on switches come back from the Keychain if Nyeko's preferences were lost.
+        ConnectionSettingsBackup.restoreAndWatch()
         // Coucou for Android (off unless the user turned it on in Settings)
         AndroidLinkService.shared.startIfEnabled()
         // Nyeko's phone web app, through the user's own relay (off until turned on in Settings → Phone).
