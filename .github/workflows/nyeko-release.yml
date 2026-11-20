@@ -29,11 +29,16 @@ jobs:
       build: ${{ steps.n.outputs.build }}
       version: ${{ steps.n.outputs.version }}
     steps:
-      # One number for the three apps. It starts above the per-app builds that came before (the last Android one was
-      # versionCode 113), so a phone that has an older build still sees this one as newer.
+      # One number for the three apps, always above every Nyeko so far (the private Kestrel's releases went up to
+      # 1.0.26, versionCode 126), so a phone or Mac with an older build sees this one as newer. Never below the newest
+      # release here either.
       - id: n
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          b=$((GITHUB_RUN_NUMBER + 20))
+          b=$((GITHUB_RUN_NUMBER + 26))
+          last=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '[.[].tag_name | select(test("^nyeko-1\\.0\\.[0-9]+$")) | ltrimstr("nyeko-1.0.") | tonumber] | max // 0' || echo 0)
+          [ "$b" -gt "$last" ] || b=$((last + 1))
           echo "build=$b" >> "$GITHUB_OUTPUT"
           echo "version=1.0.$b" >> "$GITHUB_OUTPUT"
 
