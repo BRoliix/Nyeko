@@ -68,7 +68,12 @@ pub fn allowed(path: &Path, home: &Path) -> bool {
 
 /// The real path the phone may use, or None: empty means the home folder; "~" is expanded; links are followed.
 pub fn resolve(asked: Option<&str>) -> Option<PathBuf> {
-    let home = home()?;
+    resolve_in(asked, &home()?)
+}
+
+/// resolve() against a given home folder (the tests use their own: another test points the real one elsewhere).
+pub fn resolve_in(asked: Option<&str>, home: &Path) -> Option<PathBuf> {
+    let home = home.to_path_buf();
     let raw = asked.unwrap_or("").trim();
     if raw.len() > 4096 || raw.contains('\0') {
         return None;
@@ -127,7 +132,14 @@ pub fn kind(path: &Path) -> &'static str {
 
 /// One folder for the phone: folders first, then files, by name. Hidden entries are left out.
 pub fn listing(dir: &Path) -> Value {
-    let Some(home) = home() else { return json!({ "ok": false, "note": "No home folder." }) };
+    match home() {
+        Some(home) => listing_in(dir, &home),
+        None => json!({ "ok": false, "note": "No home folder." }),
+    }
+}
+
+pub fn listing_in(dir: &Path, home: &Path) -> Value {
+    let home = home.to_path_buf();
     let Ok(read) = std::fs::read_dir(dir) else {
         return json!({ "ok": false, "note": "Nyeko can't read this folder." });
     };
@@ -167,7 +179,14 @@ pub fn listing(dir: &Path) -> Value {
 /// A file for the phone: the header, then its bytes in base64 chunks. Text is cut at MAX_TEXT; an image over MAX_BINARY
 /// and any other kind aren't sent (the header says so).
 pub fn preview(path: &Path) -> (Value, Vec<String>) {
-    let Some(home) = home() else { return (json!({ "ok": false, "note": "No home folder." }), vec![]) };
+    match home() {
+        Some(home) => preview_in(path, &home),
+        None => (json!({ "ok": false, "note": "No home folder." }), vec![]),
+    }
+}
+
+pub fn preview_in(path: &Path, home: &Path) -> (Value, Vec<String>) {
+    let home = home.to_path_buf();
     let Ok(meta) = std::fs::metadata(path) else { return (json!({ "ok": false, "note": "That file isn't there any more." }), vec![]) };
     if meta.is_dir() {
         return (json!({ "ok": false, "note": "That is a folder." }), vec![]);
@@ -213,33 +232,47 @@ pub fn launch_folder(asked: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    /// A home folder of the test's own (writing_backs_up_preserves… in hooks.rs points the real one elsewhere).
+    fn fake_home(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("nyeko-files-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        plain(&std::fs::canonicalize(&dir).unwrap())
+    }
+
     #[test]
     fn only_the_home_folder_and_nothing_hidden() {
-        let home = home().unwrap();
+        let home = fake_home("rules");
+        std::fs::create_dir_all(home.join("Projects").join("app")).unwrap();
+        std::fs::create_dir_all(home.join(".ssh")).unwrap();
         assert!(allowed(&home, &home));
         assert!(!allowed(&home.join(".ssh"), &home));
         assert!(!allowed(&home.join("Projects").join(".env"), &home));
         assert!(allowed(&home.join("Projects").join("app"), &home));
         assert!(!allowed(Path::new(if cfg!(windows) { r"C:\Windows" } else { "/etc" }), &home));
-        assert_eq!(resolve(Some("")), Some(home.clone()));
-        assert_eq!(resolve(Some("relative/path")), None);
-        assert_eq!(resolve(Some(if cfg!(windows) { r"C:\Windows\System32" } else { "/etc" })), None);
+        assert_eq!(resolve_in(Some(""), &home), Some(home.clone()));
+        assert_eq!(resolve_in(Some("~/Projects/app"), &home), Some(home.join("Projects").join("app")));
+        assert_eq!(resolve_in(Some("relative/path"), &home), None);
+        assert_eq!(resolve_in(Some(&home.join(".ssh").display().to_string()), &home), None);
+        assert_eq!(resolve_in(Some(&home.join("Projects").join("..").join("..").display().to_string()), &home), None);
+        std::fs::remove_dir_all(&home).unwrap();
     }
 
     #[test]
     fn a_folder_lists_folders_first_and_hides_dotfiles() {
-        let home = home().unwrap();
-        let dir = home.join(format!("nyeko-files-test-{}", std::process::id()));
+        let home = fake_home("list");
+        let dir = home.join("work");
         std::fs::create_dir_all(dir.join("b-folder")).unwrap();
         std::fs::write(dir.join("a.txt"), "héllo").unwrap();
         std::fs::write(dir.join(".secret"), "x").unwrap();
-        let l = listing(&dir);
+        let l = listing_in(&dir, &home);
         let names: Vec<&str> = l["entries"].as_array().unwrap().iter().map(|e| e["name"].as_str().unwrap()).collect();
         assert_eq!(names, ["b-folder", "a.txt"]);
-        let (h, chunks) = preview(&dir.join("a.txt"));
+        assert_eq!(l["parent"].as_str(), Some(home.display().to_string().as_str()));
+        let (h, chunks) = preview_in(&dir.join("a.txt"), &home);
         assert_eq!((h["kind"].as_str(), h["chunks"].as_u64(), h["truncated"].as_bool()), (Some("text"), Some(1), Some(false)));
         assert_eq!(super::super::relay_crypto::base64url_decode(&chunks[0]).unwrap(), "héllo".as_bytes());
-        assert!(resolve(Some(&dir.join(".secret").display().to_string())).is_none());
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(resolve_in(Some(&dir.join(".secret").display().to_string()), &home).is_none());
+        std::fs::remove_dir_all(&home).unwrap();
     }
 }
