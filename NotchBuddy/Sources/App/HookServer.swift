@@ -23,21 +23,52 @@ final class HookServer: @unchecked Sendable {
             .appendingPathComponent("Nyeko")
     }
 
-    /// Nyeko's data lived in "NotchBuddy" (Coucou's folder) before the rebrand: copied once into "Nyeko" (Notes, Flow,
-    /// Mail, the statusline backup…). The old hook relay and socket are not: hooks written before point at the old
-    /// folder and stop reaching Nyeko, so Settings asks to install them again. The old folder is left as it was (an
-    /// upstream Coucou on the same Mac still uses it).
+    /// Nyeko's data lived in "NotchBuddy" (Coucou's folder) before the rebrand: brought once into "Nyeko" (Notes, Flow,
+    /// Mail, the dictation models, the statusline backup…). The old hook relay and socket are not: hooks written before
+    /// point at the old folder and stop reaching Nyeko, so Settings asks to install them again. The old folder is left
+    /// as it was (an upstream Coucou on the same Mac still uses it).
+    ///
+    /// It must be quick, since it runs at launch: each item is cloned (APFS copy-on-write, instant whatever its size),
+    /// with a plain copy only where cloning is impossible. A first copy that was cut short (1.0.27 copied byte by byte
+    /// on the main thread, and a Mac with the dictation model could be force-quit halfway) is completed: missing files
+    /// are brought over and a model file left shorter than the original is replaced. A marker file says it is done.
     private static let migratedSupportDir: Void = {
         let fm = FileManager.default
         let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let old = base.appendingPathComponent("NotchBuddy"), new = base.appendingPathComponent("Nyeko")
-        guard !fm.fileExists(atPath: new.path), fm.fileExists(atPath: old.path) else { return }
+        let marker = new.appendingPathComponent(".migrated-from-notchbuddy")
+        guard fm.fileExists(atPath: old.path), !fm.fileExists(atPath: marker.path) else { return }
         try? fm.createDirectory(at: new, withIntermediateDirectories: true)
         let skip: Set<String> = ["nb.sock", "nb-hook", "nb-hook.py"]
         for name in (try? fm.contentsOfDirectory(atPath: old.path)) ?? [] where !skip.contains(name) {
-            try? fm.copyItem(at: old.appendingPathComponent(name), to: new.appendingPathComponent(name))
+            bringOver(old.appendingPathComponent(name), to: new.appendingPathComponent(name), models: name == "Models")
         }
+        fm.createFile(atPath: marker.path, contents: Data())
     }()
+
+    /// Clones `src` to `dst` when `dst` is missing; when it exists (an earlier, unfinished copy), fills in what is missing
+    /// inside it. Never overwrites Nyeko's own newer data, except a model file shorter than the original (cut short).
+    private static func bringOver(_ src: URL, to dst: URL, models: Bool) {
+        let fm = FileManager.default
+        var srcIsDir: ObjCBool = false, dstIsDir: ObjCBool = false
+        guard fm.fileExists(atPath: src.path, isDirectory: &srcIsDir) else { return }
+        if !fm.fileExists(atPath: dst.path, isDirectory: &dstIsDir) {
+            if clonefile(src.path, dst.path, 0) != 0 { try? fm.copyItem(at: src, to: dst) }
+            return
+        }
+        if srcIsDir.boolValue && dstIsDir.boolValue {
+            for name in (try? fm.contentsOfDirectory(atPath: src.path)) ?? [] {
+                bringOver(src.appendingPathComponent(name), to: dst.appendingPathComponent(name), models: models)
+            }
+        } else if models, !srcIsDir.boolValue, !dstIsDir.boolValue {
+            let size = { (u: URL) in ((try? fm.attributesOfItem(atPath: u.path))?[.size] as? NSNumber)?.int64Value ?? 0 }
+            if size(dst) < size(src) {
+                try? fm.removeItem(at: dst)
+                if clonefile(src.path, dst.path, 0) != 0 { try? fm.copyItem(at: src, to: dst) }
+            }
+        }
+    }
+
     static var socketPath: String {
         #if APPSTORE
         // Container home root keeps path ≤ 103 bytes (sun_path limit on macOS is 104 incl. NUL)
