@@ -660,7 +660,8 @@ mod tests {
             let hub = Hub::new(Arc::new(Recorder::default()));
             let shared = Shared::with_features(hub, "t".repeat(32), "Test PC".to_string(), None, Arc::new(server::NoFeatures));
             let handle = start(shared, Target { tls: false, host: "127.0.0.1".into(), port: 8799 }, creds);
-            for _ in 0..40 {
+            let secs: u64 = std::env::var("NYEKO_E2E_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(20);
+            for _ in 0..secs * 2 {
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 eprintln!("windows relay state: {:?}", handle.state());
             }

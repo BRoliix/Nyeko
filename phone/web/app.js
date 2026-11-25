@@ -5,7 +5,7 @@ import { PhoneChannel, b64url, fromB64url, random } from "./relay.js";
 import { parseSetup, sendSetup } from "./setup.js";
 import { drawNyoStill } from "./nyo.js";
 
-const VERSION = "2026-11-21 · nyeko 9";   // shown in Settings: tells which web app the phone runs
+const VERSION = "2026-11-25 · nyeko 10";   // shown in Settings: tells which web app the phone runs
 const STORE = { computers: "nyeko.computers", current: "nyeko.current", cred: "nyeko.faceid", alerts: "nyeko.alerts", oldPairing: "nyeko.pairing" };
 const APPROVAL_TTL = 115_000; // the computer dismisses a request after 115 s
 const app = document.getElementById("app");
@@ -231,6 +231,20 @@ async function setupComputer(text) {
   } catch (e) {
     toast(e?.message || "The setup did not work: try again.", 8000);
   }
+}
+
+/** This computer's pairing again, as a code to paste in another copy of Nyeko (Safari → the Home Screen app). */
+function codeOf(c) {
+  const p = c.p;
+  const j = { v: 1, relay: p.relay, room: p.room, key: p.key, access: p.access, token: p.token, name: p.name, vapid: p.vapid || undefined, cid: p.cid || undefined };
+  return `${location.origin}/#pair=${b64url(new TextEncoder().encode(JSON.stringify(j)))}`;
+}
+
+async function copyForApp(c) {
+  try {
+    await navigator.clipboard.writeText(codeOf(c));
+    toast(`Copied. Open Nyeko from your Home Screen: Settings › Add a computer › Paste pairing code.`, 7000);
+  } catch { toast("Copy did not work. Try again."); }
 }
 
 /** Adds (or, for the same room, replaces) a computer and connects to it. */
@@ -695,6 +709,12 @@ function nowTab() {
   rows.sort((a, b) => order[sessionClass(a.x.state)] - order[sessionClass(b.x.state)]);
   const u = cur()?.usage?.claude;
   return [
+    // Nyeko in Safari on an iPhone keeps its own computers: the Home Screen app never sees them (and a private tab
+    // forgets them when it closes). Say so, and move them across by the clipboard.
+    isIOS && !standalone() ? h("section.card.tinted", h("div.card-body",
+      h("div.title", "You're in Safari, not the Nyeko app"),
+      h("p.sub", "Computers added here stay in Safari: the Nyeko app on your Home Screen doesn't see them, and a private tab forgets them when you close it. Move them to the app: Settings › Copy for the app on each computer, then paste it there."),
+      h("div.pair-btns", h("button.btn.primary", { onclick: () => { state.tab = "settings"; render(); } }, "Move my computers")))) : null,
     state.computers.map((c) => [approvalCard(c), questionCard(c)]),
     // Android in the browser: Nyo on the screen and the camera-hole island need the app (a web page can't draw over apps).
     !isIOS && !load("nyeko.appHint.hidden") ? h("section.card.tinted",
@@ -1132,6 +1152,7 @@ function settingsTab() {
             h("span.row-meta.faint", `via ${new URL(c.p.relay.replace(/^ws/, "http")).host}`)),
           h("span.computer-actions",
             many() ? (inUse ? h("span.tag", "In use") : h("button.btn.small", { onclick: () => { state.current = c.id; saveComputers(); render(); } }, "Use")) : null,
+            isIOS && !standalone() ? h("button.link", { onclick: () => copyForApp(c) }, "Copy for the app") : null,
             h("button.link.danger", { onclick: () => removeComputer(c) }, "Remove")));
       }),
       h("div.card-body", h("button.btn.primary.block", { onclick: () => { state.tab = "add"; render(); } }, icon("plus", 20), "Add a computer"))),
@@ -1206,7 +1227,7 @@ function pairScreen() {
       } }, "Copy pairing code"),
       h("ol.steps", h("li", "Open Nyeko from your Home Screen (not there yet? Share › Add to Home Screen first)."),
         h("li", "Settings › Add a computer › Paste pairing code. Your other computers stay.")),
-      h("button.link", { onclick: () => addComputer(location.hash) }, "Or use Nyeko here in Safari"))) : null,
+      h("button.link", { onclick: () => addComputer(location.hash) }, "Use it in Safari only (the Home Screen app won't have it)"))) : null,
     // In Safari on the iPhone, without a code: install first (a pairing made in Safari stays in Safari).
     !standalone() && !fromLink && isIOS ? h("section.card.tinted", h("div.card-body",
       h("div.title", "Install Nyeko first"),
