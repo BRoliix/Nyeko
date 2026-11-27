@@ -290,6 +290,8 @@ where
     let services: Vec<String> = if asked("services") { shared.features.services() } else { Vec::new() };
     // Nyeko (the private build): the computer's controls and the sessions' conversations, to a phone that asks.
     let nyeko = asked("nyeko");
+    // A Mac sharing one mouse and keyboard with this PC (share.rs).
+    let share = asked("share");
     let mut offered: Vec<&str> = Vec::new();
     if chat.is_some() {
         offered.push("chat");
@@ -321,6 +323,9 @@ where
     if nyeko {
         offered.push("nyeko");
     }
+    if share {
+        offered.push("share");
+    }
     let mut welcome = json!({ "type": "welcome", "v": PROTOCOL, "desktop": shared.name, "os": std::env::consts::OS });
     if let Some(cid) = super::pairing::known_computer_id() {
         welcome["cid"] = cid.into();
@@ -330,6 +335,7 @@ where
     }
     let _ = say(welcome).await;
     let nyeko = nyeko.then(|| super::nyeko::Conn::new(tx.clone(), shared.name.clone()));
+    let share = share.then(|| super::share::connect(tx.clone()));
     let (id, evicted) = shared.hub.subscribe_with(tx.clone(), (shared.clock)(), crate::phone_link::hub::Caps { details, answers, prefs, diffs, usage, recap, relay, services });
 
     // 2. the conversation
@@ -348,7 +354,15 @@ where
         if evicted.load(Ordering::SeqCst) {
             break;
         }
+        if let Some(s) = share {
+            super::share::heard(s);
+        }
         match msg["type"].as_str() {
+            Some(t) if share.is_some() && super::share::handles(t) => {
+                if let Some(s) = share {
+                    super::share::handle(s, &msg);
+                }
+            }
             Some("ping") => {
                 let _ = say(json!({ "type": "pong" })).await;
             }
@@ -391,6 +405,9 @@ where
     shared.hub.unsubscribe(id);
     if let Some(n) = &nyeko {
         n.end();
+    }
+    if let Some(s) = share {
+        super::share::disconnect(s);
     }
     if let Some(chat) = &chat {
         chat.cancel_conn(id);

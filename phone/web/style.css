@@ -342,3 +342,15 @@ details.hash code { display: block; margin-top: 6px; font: 11.5px/1.5 var(--mono
 .kbd-sink:focus { border-color: var(--tan); }
 
 .pad-entry { margin-top: 6px; }
+
+/* One mouse for a Mac and a PC */
+.share-card { margin-top: 12px; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.share-head { display: flex; align-items: center; gap: 12px; }
+.share-pair { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.share-screen { min-width: 74px; padding: 9px 12px 11px; border: 2px solid var(--ink); border-radius: 10px; background: var(--card);
+  font: 600 14px/1 var(--display); text-align: center; position: relative; }
+.share-screen::after { content: ""; position: absolute; left: 50%; bottom: -8px; width: 26px; height: 6px; margin-left: -13px;
+  border: 2px solid var(--ink); border-top: 0; border-radius: 0 0 6px 6px; background: var(--fur); }
+.share-screen.pc { background: var(--mint); }
+.share-arrow { color: var(--ink-2); display: grid; place-items: center; }
+.share-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }

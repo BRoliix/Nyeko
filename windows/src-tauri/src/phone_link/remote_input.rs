@@ -96,7 +96,7 @@ pub fn handle(events: &[Value]) {
 }
 
 #[cfg(windows)]
-mod os {
+pub(super) mod os {
     use super::Event;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP,
@@ -112,22 +112,22 @@ mod os {
         wheel: (f64, f64),
     }
 
-    fn mouse(flags: MOUSE_EVENT_FLAGS, dx: i32, dy: i32, data: i32) -> INPUT {
+    pub(crate) fn mouse(flags: MOUSE_EVENT_FLAGS, dx: i32, dy: i32, data: i32) -> INPUT {
         INPUT { r#type: INPUT_MOUSE, Anonymous: INPUT_0 { mi: MOUSEINPUT { dx, dy, mouseData: data as u32, dwFlags: flags, time: 0, dwExtraInfo: 0 } } }
     }
 
-    fn key(vk: u16, scan: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
+    pub(crate) fn key(vk: u16, scan: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
         INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VIRTUAL_KEY(vk), wScan: scan, dwFlags: flags, time: 0, dwExtraInfo: 0 } } }
     }
 
-    fn send(inputs: &[INPUT]) {
+    pub(crate) fn send(inputs: &[INPUT]) {
         unsafe {
             SendInput(inputs, std::mem::size_of::<INPUT>() as i32);
         }
     }
 
     /// Windows virtual keys for the keys the phone names, and whether each is an "extended" key.
-    fn vk(name: &str) -> Option<(u16, bool)> {
+    pub(crate) fn vk(name: &str) -> Option<(u16, bool)> {
         Some(match name {
             "enter" => (0x0D, false), "tab" => (0x09, false), "space" => (0x20, false), "backspace" => (0x08, false), "esc" => (0x1B, false),
             "delete" => (0x2E, true), "left" => (0x25, true), "up" => (0x26, true), "right" => (0x27, true), "down" => (0x28, true),
@@ -140,9 +140,9 @@ mod os {
         })
     }
 
-    fn modifier(name: &str) -> Option<u16> {
+    pub(crate) fn modifier(name: &str) -> Option<u16> {
         Some(match name {
-            "ctrl" => 0x11, "shift" => 0x10, "alt" | "option" => 0x12, "cmd" | "meta" | "win" => 0x5B,
+            "ctrl" => 0x11, "shift" => 0x10, "alt" | "option" => 0x12, "cmd" | "meta" | "win" => 0x5B, "capslock" => 0x14,
             _ => return None,
         })
     }

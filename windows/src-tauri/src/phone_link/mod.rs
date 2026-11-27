@@ -28,6 +28,7 @@ mod pairing;
 mod relay_client;
 mod relay_crypto;
 mod server;
+mod share;
 mod setup;
 #[cfg(test)]
 mod tests;
@@ -210,6 +211,7 @@ impl PhoneLink {
                     Ok(()) => log::line("phone link: announced on the local network"),
                     Err(e) => log::line(format!("phone link: not announced on the local network: {e}")),
                 }
+                share::set_server(Some((r.port, r.identity.fingerprint.clone(), r.shared.clone())));
                 *running = Some(r);
                 *self.error.lock().unwrap() = None;
                 drop(running);
@@ -256,6 +258,7 @@ impl PhoneLink {
             relay.stop();
         }
         self.advertiser.stop();
+        share::set_server(None);
         if let Some(r) = self.running.lock().unwrap().take() {
             r.handle.stop();
             log::line("phone link: stopped");

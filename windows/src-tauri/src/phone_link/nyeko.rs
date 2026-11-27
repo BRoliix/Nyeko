@@ -29,7 +29,7 @@ use super::hub::Out;
 pub const PHONE_PREFIX: &str = "The user sent this from their phone:";
 
 /// The phone's messages handled here.
-const TYPES: &[&str] = &["status", "control", "ask", "open", "close", "say", "unqueue", "launch", "listApps", "pushSub", "browse", "preview", "reveal", "input"];
+const TYPES: &[&str] = &["status", "control", "ask", "open", "close", "say", "unqueue", "launch", "listApps", "pushSub", "browse", "preview", "reveal", "input", "shareOffer"];
 
 pub fn handles(t: &str) -> bool {
     TYPES.contains(&t)
@@ -892,6 +892,14 @@ impl Conn {
                     let _ = self.tx.try_send(line(json!({ "type": "inputState", "ok": ok, "note": note })));
                 }
                 super::remote_input::handle(&events);
+            }
+            "shareOffer" => {
+                // The phone sets up one mouse for a Mac and this PC: it hands this link to the Mac (share.rs).
+                let reply = match super::share::offer() {
+                    Ok(link) => json!({ "type": "shareOffer", "ok": true, "link": link, "name": self.name }),
+                    Err(note) => json!({ "type": "shareOffer", "ok": false, "note": note }),
+                };
+                let _ = self.tx.try_send(line(reply));
             }
             "reveal" => {
                 // Shows a file or folder in the file manager: selected, never opened.

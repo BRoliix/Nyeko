@@ -123,6 +123,9 @@ final class NyekoPhoneService: ObservableObject {
     }
 
     func startIfEnabled() {
+        // The shared mouse works without the phone link; the phone only sets it up.
+        MacShare.shared.onChange = { NyekoPhoneService.shared.sendMacStatus() }
+        MacShare.shared.start()
         if Self.isEnabled { start() }
     }
 
@@ -430,6 +433,7 @@ final class NyekoPhoneService: ObservableObject {
         mac["name"] = NyekoIdentity.name()
         mac["cid"] = NyekoIdentity.id
         mac["os"] = "macos"
+        if let share = MacShare.shared.status { mac["share"] = share }
         if let v = SystemVolume.get() { mac["volume"] = v }
         if let m = MacSystemControl.muted { mac["muted"] = m }
         // The folders a new session can start in (the notch launcher's recent projects). The phone names one by id.
@@ -522,6 +526,12 @@ final class NyekoPhoneService: ObservableObject {
                     "note": ok ? "" : "Allow Nyeko in System Settings › Privacy & Security › Accessibility on the Mac, then try again."])
             }
             MacRemoteInput.handle(events)
+        case "share":
+            // One mouse and keyboard for this Mac and a PC (MacShare; docs/SHARED_MOUSE.md): set up from the phone.
+            var reply = MacShare.shared.command(object)
+            reply["type"] = "shareState"
+            client?.sendNyeko(reply)
+            sendMacStatus()
         case "reveal":
             // Shows a file or folder in the Finder: selected, never opened.
             if let url = NyekoFiles.resolve(object["path"] as? String) {

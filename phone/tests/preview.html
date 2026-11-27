@@ -31,6 +31,7 @@
     { r: "tools", t: "Bash curl -I https://apple.com" },
     { r: "nyo", t: "301 Redirect → https://www.apple.com/\n\nApple's apex domain redirects to www. No caching (Cache-Control: no-store), served through their CDN." },
   ];
+  if (view === "shared") mac.share = { name: "IT · green", cid: "", side: "left", state: "on" };
   window.NYEKO_PREVIEW = {
     computers: [
       { p: { room: A, name: "Neko's MacBook Pro · greenhawk_nyek", relay }, live: { status: "open", os: "macos", desktop: "Neko's MacBook Pro · greenhawk_nyek",
@@ -43,7 +44,7 @@
       { p: { room: C, name: "Neko's MacBook Pro · nekonyo", relay }, live: { status: "connecting", os: "macos", desktop: "Neko's MacBook Pro · nekonyo" } },
     ],
     state: {
-      tab: { quiet: "now", pair: "add", fileview: "files" }[view] || view, current: A,
+      tab: { quiet: "now", pair: "add", fileview: "files", shared: "mac" }[view] || view, current: A,
       thread: view === "session" ? { comp: A, id: "t1", title: "Recalling previous conversation", sub: "", sending: [], open: {},
         data: { title: "Recalling previous conversation", host: "Terminal", folder: "Kestrel", state: "idle", readable: true, canMessage: true, items, queued: [] } } : null,
       files: view === "files" || view === "fileview" ? { comp: A, path: "/Users/neko/Kestrel", asked: null, pick: false,

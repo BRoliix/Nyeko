@@ -52,6 +52,10 @@
 	<string>Nyeko uses this to jump to your terminal, send emails, and control Music and Spotify.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>Nyeko records what your Mac plays only while you note a call, to write down what the other people say.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_coucou._tcp</string>
+	</array>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Nyeko shows your next event in the island. Your calendar stays on this Mac.</string>
 	<key>NSCalendarsUsageDescription</key>
@@ -68,6 +72,8 @@
 	<string>Nyeko stays quiet about new WhatsApp messages while a Focus is on.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Nyeko connects to your PC on this network when you share one mouse and keyboard between them.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Nyeko uses the microphone when you dictate, and to note your calls when you ask it to.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

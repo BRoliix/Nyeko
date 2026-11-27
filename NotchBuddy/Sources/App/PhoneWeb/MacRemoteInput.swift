@@ -11,14 +11,20 @@ enum MacRemoteInput {
     /// Whether the Mac lets Nyeko post events. When `ask`, macOS shows its Accessibility prompt on the Mac.
     static func ready(ask: Bool = false) -> Bool {
         if ask {
-            let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-            return AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+            return AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
         }
         return AXIsProcessTrusted()
     }
 
+    /// Marks the events Nyeko posts, so the shared mouse's event tap (MacShare) lets them through untouched.
+    nonisolated static let marker: Int64 = 0x4E59_454B
+
     private static var leftDown = false
     private static var rightDown = false
+    private static var middleDown = false
+    /// Keys held by the shared mouse's keyboard (kd/ku), and its modifiers.
+    private static var held: Set<CGKeyCode> = []
+    private static var heldFlags: CGEventFlags = []
     private static var scrollCarry = CGPoint.zero
     private static let source = CGEventSource(stateID: .hidSystemState)
 
@@ -39,20 +45,30 @@ enum MacRemoteInput {
         return best
     }
 
-    private static var location: CGPoint { CGEvent(source: nil)?.location ?? .zero }
+    static var location: CGPoint { CGEvent(source: nil)?.location ?? .zero }
+
+    private static func post(_ ev: CGEvent?) {
+        ev?.setIntegerValueField(.eventSourceUserData, value: marker)
+        ev?.post(tap: .cghidEventTap)
+    }
 
     /// One event from the phone, checked.
     enum Event: Sendable {
-        case move(CGPoint), down(right: Bool), up(right: Bool), click(right: Bool, n: Int)
+        case move(CGPoint), down(String), up(String), click(right: Bool, n: Int)
         case scroll(dx: Double, dy: Double), text(String), key(String, mods: [String]), release
+        /// A key pressed or let go on the shared keyboard (another computer's), by name.
+        case keyDown(String), keyUp(String)
     }
 
     static func parse(_ e: [String: Any]) -> Event? {
         let right = e["b"] as? String == "right"
+        let b = (e["b"] as? String).flatMap { ["right", "middle"].contains($0) ? $0 : nil } ?? "left"
         switch e["k"] as? String {
         case "move": return .move(CGPoint(x: num(e["dx"], limit: 4000), y: num(e["dy"], limit: 4000)))
-        case "down": return .down(right: right)
-        case "up": return .up(right: right)
+        case "down": return .down(b)
+        case "up": return .up(b)
+        case "kd": return (e["key"] as? String).flatMap { $0.count <= 12 ? .keyDown($0) : nil }
+        case "ku": return (e["key"] as? String).flatMap { $0.count <= 12 ? .keyUp($0) : nil }
         case "click": return .click(right: right, n: max(1, Int(num(e["n"], limit: 3))))
         case "scroll": return .scroll(dx: num(e["dx"], limit: 4000), dy: num(e["dy"], limit: 4000))
         case "text": return (e["t"] as? String).map { .text(String($0.prefix(500))) }
@@ -96,8 +112,10 @@ enum MacRemoteInput {
     static func apply(_ ev: Event) {
         switch ev {
         case .move(let d): move(by: d)
-        case .down(let right): button(right ? "right" : "left", down: true)
-        case .up(let right): button(right ? "right" : "left", down: false)
+        case .down(let b): button(b, down: true)
+        case .up(let b): button(b, down: false)
+        case .keyDown(let k): transition(k, down: true)
+        case .keyUp(let k): transition(k, down: false)
         case .click(let right, let n):
             button(right ? "right" : "left", down: true, clicks: n)
             button(right ? "right" : "left", down: false, clicks: n)
@@ -115,20 +133,50 @@ enum MacRemoteInput {
 
     static func move(by d: CGPoint) {
         let to = clamp(CGPoint(x: location.x + d.x, y: location.y + d.y))
-        let type: CGEventType = leftDown ? .leftMouseDragged : rightDown ? .rightMouseDragged : .mouseMoved
-        let ev = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: to, mouseButton: leftDown ? .left : .right)
+        let type: CGEventType = leftDown ? .leftMouseDragged : rightDown ? .rightMouseDragged : middleDown ? .otherMouseDragged : .mouseMoved
+        let ev = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: to,
+                         mouseButton: leftDown ? .left : rightDown ? .right : middleDown ? .center : .left)
         ev?.setIntegerValueField(.mouseEventDeltaX, value: Int64(d.x.rounded()))
         ev?.setIntegerValueField(.mouseEventDeltaY, value: Int64(d.y.rounded()))
-        ev?.post(tap: .cghidEventTap)
+        ev?.flags = heldFlags
+        post(ev)
     }
 
-    private static func button(_ which: String?, down: Bool, clicks: Int = 1) {
-        let right = which == "right"
-        let type: CGEventType = right ? (down ? .rightMouseDown : .rightMouseUp) : (down ? .leftMouseDown : .leftMouseUp)
-        let ev = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: location, mouseButton: right ? .right : .left)
-        ev?.setIntegerValueField(.mouseEventClickState, value: Int64(clicks))
-        ev?.post(tap: .cghidEventTap)
-        if right { rightDown = down } else { leftDown = down }
+    /// The pointer straight to a point (kept on the screens), as a move: no warp, so the mouse is not held still after it.
+    static func moveTo(_ p: CGPoint) {
+        let at = location
+        move(by: CGPoint(x: p.x - at.x, y: p.y - at.y))
+    }
+
+    /// A click counts as a double click when it comes soon enough after the last one, close enough to it.
+    private static var lastClick: (at: Date, point: CGPoint, button: String, count: Int) = (.distantPast, .zero, "", 0)
+
+    private static func button(_ which: String, down: Bool, clicks: Int? = nil) {
+        let type: CGEventType
+        let button: CGMouseButton
+        switch which {
+        case "right": type = down ? .rightMouseDown : .rightMouseUp; button = .right; rightDown = down
+        case "middle": type = down ? .otherMouseDown : .otherMouseUp; button = .center; middleDown = down
+        default: type = down ? .leftMouseDown : .leftMouseUp; button = .left; leftDown = down
+        }
+        var count = clicks ?? 1
+        if clicks == nil {
+            // A separate down and up (a real mouse, or a press held on the phone): count the clicks like macOS would.
+            let p = location
+            if down {
+                let near = hypot(p.x - lastClick.point.x, p.y - lastClick.point.y) < 6
+                let soon = Date().timeIntervalSince(lastClick.at) < NSEvent.doubleClickInterval
+                count = (near && soon && lastClick.button == which) ? min(lastClick.count + 1, 3) : 1
+                lastClick = (Date(), p, which, count)
+            } else {
+                count = lastClick.button == which ? lastClick.count : 1
+            }
+        }
+        let ev = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: location, mouseButton: button)
+        ev?.setIntegerValueField(.mouseEventClickState, value: Int64(count))
+        if which == "middle" { ev?.setIntegerValueField(.mouseEventButtonNumber, value: 2) }
+        ev?.flags = heldFlags
+        post(ev)
     }
 
     /// Pixels the phone's two fingers moved; dy > 0 shows what is further down.
@@ -137,7 +185,7 @@ enum MacRemoteInput {
         let x = Int32(scrollCarry.x.rounded(.towardZero)), y = Int32(scrollCarry.y.rounded(.towardZero))
         guard x != 0 || y != 0 else { return }
         scrollCarry.x -= Double(x); scrollCarry.y -= Double(y)
-        CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2, wheel1: -y, wheel2: -x, wheel3: 0)?.post(tap: .cghidEventTap)
+        post(CGEvent(scrollWheelEvent2Source: source, units: .pixel, wheelCount: 2, wheel1: -y, wheel2: -x, wheel3: 0))
     }
 
     /// Text as typed, in whatever app is in front (any language: the characters themselves, not keys).
@@ -152,14 +200,14 @@ enum MacRemoteInput {
                 let ev = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down)
                 ev?.flags = []
                 chunk.withUnsafeBufferPointer { ev?.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress) }
-                ev?.post(tap: .cghidEventTap)
+                post(ev)
             }
             i += max(1, chunk.count)
         }
     }
 
     /// macOS virtual key codes (ANSI layout) for the keys the phone names.
-    static let keyCodes: [String: CGKeyCode] = [
+    nonisolated static let keyCodes: [String: CGKeyCode] = [
         "enter": 36, "tab": 48, "space": 49, "backspace": 51, "esc": 53, "delete": 117,
         "left": 123, "right": 124, "down": 125, "up": 126, "home": 115, "end": 119, "pageup": 116, "pagedown": 121,
         "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97, "f7": 98, "f8": 100, "f9": 101, "f10": 109, "f11": 103, "f12": 111,
@@ -184,14 +232,48 @@ enum MacRemoteInput {
         for down in [true, false] {
             let ev = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down)
             ev?.flags = flags
-            ev?.post(tap: .cghidEventTap)
+            post(ev)
         }
+    }
+
+    /// The name of a macOS key code, for the shared keyboard (nil for keys it does not carry).
+    nonisolated static func keyName(_ code: Int64) -> String? { keyNames[code] }
+
+    nonisolated private static let keyNames: [Int64: String] = Dictionary(keyCodes.map { (Int64($0.value), $0.key) }, uniquingKeysWith: { a, _ in a })
+
+    /// The modifiers as the other computer names them, and the Mac's: what Windows' Ctrl, Win and Alt become here is the
+    /// PC's choice (remote_input.rs: Ctrl → ⌘ so Ctrl+C copies, Win → ⌃).
+    private static let modifierCodes: [String: (code: CGKeyCode, flag: CGEventFlags)] = [
+        "cmd": (55, .maskCommand), "ctrl": (59, .maskControl), "alt": (58, .maskAlternate), "shift": (56, .maskShift),
+    ]
+
+    /// A key of the shared keyboard pressed or let go. Keys held go down with the modifiers held.
+    private static func transition(_ name: String, down: Bool) {
+        let n = name.lowercased()
+        if let m = modifierCodes[n] {
+            if down { heldFlags.insert(m.flag) } else { heldFlags.remove(m.flag) }
+            let ev = CGEvent(keyboardEventSource: source, virtualKey: m.code, keyDown: down)
+            ev?.type = .flagsChanged
+            ev?.flags = heldFlags
+            post(ev)
+            return
+        }
+        guard let code = keyCodes[n] else { return }
+        if down { held.insert(code) } else { held.remove(code) }
+        let ev = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down)
+        ev?.flags = heldFlags
+        post(ev)
     }
 
     /// The phone left the trackpad (or lost the link): no button stays held.
     static func release() {
         if leftDown { button("left", down: false) }
         if rightDown { button("right", down: false) }
+        if middleDown { button("middle", down: false) }
+        for code in held { post(CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: false)) }
+        held = []
+        for (name, m) in modifierCodes where heldFlags.contains(m.flag) { transition(name, down: false) }
+        heldFlags = []
         scrollCarry = .zero
     }
 }

@@ -37,3 +37,5 @@ A move is spread over up to four steps 8 ms apart on the computer, so the pointe
 
 Code: Mac `NotchBuddy/Sources/App/PhoneWeb/MacRemoteInput.swift`, Windows `windows/src-tauri/src/phone_link/remote_input.rs`
 (with tests), phone `phone/web/app.js` (`openPad`, `padTab`, `touchSurface`).
+
+Sharing one mouse and keyboard between a Mac and a PC beside it (push the pointer off the side of the screen) is described in [SHARED_MOUSE.md](SHARED_MOUSE.md).

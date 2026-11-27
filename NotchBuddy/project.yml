@@ -175,6 +175,9 @@ targets:
         NSDesktopFolderUsageDescription: "Nyeko shows the files on your Desktop on your paired phone, when you browse them there."
         NSDocumentsFolderUsageDescription: "Nyeko shows the files in Documents on your paired phone, when you browse them there."
         NSDownloadsFolderUsageDescription: "Nyeko shows the files in Downloads on your paired phone, when you browse them there."
+        NSLocalNetworkUsageDescription: "Nyeko connects to your PC on this network when you share one mouse and keyboard between them."
+        NSBonjourServices:
+          - _coucou._tcp
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         CFBundleLocalizations:

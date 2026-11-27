@@ -83,6 +83,8 @@ final class KeychainStore: @unchecked Sendable {
         "portfolio-bybit-key",    "portfolio-bybit-secret",
         "portfolio-kraken-key",   "portfolio-kraken-secret",
         "portfolio-coinbase-key", "portfolio-coinbase-secret",  "portfolio-coinbase-passphrase",
+        // Nyeko: the PC this Mac shares its mouse and keyboard with (MacShare)
+        "nyeko-share-token",
     ]
 
     private init() {

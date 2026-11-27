@@ -5,7 +5,7 @@ import { PhoneChannel, b64url, fromB64url, random } from "./relay.js";
 import { parseSetup, sendSetup } from "./setup.js";
 import { drawNyoStill } from "./nyo.js";
 
-const VERSION = "2026-11-27 · nyeko 11";   // shown in Settings: tells which web app the phone runs
+const VERSION = "2026-11-27 · nyeko 12";   // shown in Settings: tells which web app the phone runs
 const STORE = { computers: "nyeko.computers", current: "nyeko.current", cred: "nyeko.faceid", alerts: "nyeko.alerts", oldPairing: "nyeko.pairing" };
 const APPROVAL_TTL = 115_000; // the computer dismisses a request after 115 s
 const app = document.getElementById("app");
@@ -102,6 +102,7 @@ const ICONS = {
   up: ["M12 19V6M6 11.5L12 5.5l6 6"],
   keyboard: ["M3.5 7.5A1.5 1.5 0 015 6h14a1.5 1.5 0 011.5 1.5v9A1.5 1.5 0 0119 18H5a1.5 1.5 0 01-1.5-1.5z", "M7 10h.01M10.5 10h.01M14 10h.01M17.5 10h.01M8 14h8"],
   pointer: ["M6 3.5l12 7.5-5.2 1.3 3 5.6-2.4 1.3-3-5.6L6.5 18z"],
+  swap: ["M5 8.5h13.5l-3.5-3.5", "M19 15.5H5.5l3.5 3.5"],
   play: ["M8 5.5v13l10.5-6.5z"], pause: ["M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"],
   next: ["M5.5 6l8.5 6-8.5 6zM16 6h2.5v12H16z"], prev: ["M18.5 6L10 12l8.5 6zM5.5 6H8v12H5.5z"],
 };
@@ -297,6 +298,69 @@ function androidLinkOf(code) {
   } catch { return null; }
 }
 
+// ── One mouse and keyboard for a Mac and a PC (docs/SHARED_MOUSE.md) ─────────────────────────────────────────────────
+// The phone only introduces them: it asks the PC for its link on the Wi-Fi and hands it to the Mac, with the side the PC
+// stands on. After that the Mac and the PC talk to each other directly, phone or not.
+
+/** Whether the Mac's sharing status is about this PC. */
+const sharesWith = (s, pc) => !!s && (s.cid && pc.p.cid ? s.cid === pc.p.cid : s.name === pc.desktop);
+
+/** The Mac and the PC this computer would share with: the one the Mac already shares with, else the first connected. */
+function sharePair(c) {
+  if (c.os !== "macos" && c.os !== "windows") return null;
+  const macs = state.computers.filter((x) => x.os === "macos"), pcs = state.computers.filter((x) => x.os === "windows");
+  if (!macs.length || !pcs.length) return null;
+  const pick = (list, mine) => list.find(mine) || list.find((x) => x.status === "open") || list[0];
+  const mac = c.os === "macos" ? c : pick(macs, (m) => sharesWith(m.mac?.share, c));
+  const pc = c.os === "windows" ? c : pick(pcs, (p) => sharesWith(c.mac?.share, p));
+  return { mac, pc };
+}
+
+function setupShare(mac, pc, side) {
+  if (mac.status !== "open" || pc.status !== "open") return toast("Open Nyeko on both computers first.");
+  state.shareSetup = { mac: mac.id, pc: pc.id, side, at: Date.now() };
+  if (!send(pc, { type: "shareOffer" })) { state.shareSetup = null; return toast(`${shortName(pc)} is not connected.`); }
+  setTimeout(() => { if (state.shareSetup?.at && Date.now() - state.shareSetup.at >= 15000) { state.shareSetup = null; render(); } }, 15500);
+  render();
+}
+
+function shareCard(c) {
+  const pair = sharePair(c);
+  if (!pair) return null;
+  const { mac, pc } = pair;
+  const s = mac.mac?.share;
+  const mine = sharesWith(s, pc);
+  const macName = shortName(mac), pcName = shortName(pc);
+  const busy = !!state.shareSetup;
+  const where = (side) => `${pcName} on the ${side}`;
+  let meta;
+  if (busy) meta = "Introducing them…";
+  else if (!mine) meta = s ? `${macName} shares with ${s.name} now` : `Push the pointer off the side of one screen to reach the other`;
+  else meta = ({
+    on: `On · ${pcName} is on the ${s.side} of ${macName}`,
+    connecting: s.note || `Looking for ${pcName} on the Wi-Fi…`,
+    permission: s.note || `Allow Nyeko in Accessibility on ${macName}`,
+    refused: s.note || "Set it up again",
+    off: "Off",
+  })[s.state] || "";
+  const other = s?.side === "left" ? "right" : "left";
+  return h("section.card.share-card",
+    h("div.share-head",
+      h("span.tile.sun", icon("pointer", 20)),
+      h("span.row-main", h("span.row-title", "One mouse for both"), h("span.row-meta.wrap", meta))),
+    h("div.share-pair", { "aria-hidden": "true" },
+      h("span.share-screen" + (mine && s.side === "left" ? ".pc" : ""), mine && s.side === "left" ? "PC" : "Mac"),
+      h("span.share-arrow", icon("swap", 18)),
+      h("span.share-screen" + (mine && s.side === "left" ? "" : ".pc"), mine && s.side === "left" ? "Mac" : "PC")),
+    mine
+      ? h("div.share-btns",
+          h("button.btn.small", { disabled: mac.status !== "open", onclick: () => send(mac, { type: "share", action: "side", side: other }) }, "Swap sides"),
+          h("button.btn.small.ghost.danger", { disabled: mac.status !== "open", onclick: () => send(mac, { type: "share", action: "off" }) }, "Turn off"))
+      : h("div.share-btns",
+          h("button.btn.small", { disabled: busy, onclick: () => setupShare(mac, pc, "left") }, where("left")),
+          h("button.btn.small", { disabled: busy, onclick: () => setupShare(mac, pc, "right") }, where("right"))));
+}
+
 // ── Android: the Nyeko app when it is installed, a download when it is not ─────────────────────────────────────────
 
 const ANDROID_PACKAGE = "com.broliix.nyeko.android";
@@ -381,6 +445,18 @@ function onLine(c, m) {
       break;
     case "apps": c.apps = Array.isArray(m.apps) ? m.apps : []; break;
     case "inputState": c.inputState = { ok: !!m.ok, note: typeof m.note === "string" ? m.note.slice(0, 300) : "" }; break;
+    case "shareOffer": {
+      // The PC's link for the shared mouse, on its way to the Mac (docs/SHARED_MOUSE.md).
+      const S = state.shareSetup;
+      if (!S || S.pc !== c.id) break;
+      state.shareSetup = null;
+      const mac = comp(S.mac);
+      if (!m.ok || typeof m.link !== "string") { toast(m.note || `${shortName(c)} could not share its mouse.`, 7000); break; }
+      if (send(mac, { type: "share", action: "setup", link: m.link, side: S.side })) toast(`Connecting ${shortName(mac)} to ${shortName(c)}…`);
+      else toast(`${mac ? shortName(mac) : "The Mac"} is not connected.`);
+      break;
+    }
+    case "shareState": if (!m.ok && typeof m.note === "string" && m.note) toast(m.note.slice(0, 300), 7000); break;
     case "folder": {
       const F = state.files;
       if (!F || F.comp !== c.id || F.asked !== m.id) break;
@@ -770,6 +846,7 @@ function computerTab() {
       h("span.tile.mint", icon("pointer", 20)),
       h("span.row-main", h("span.row-title", "Trackpad and keyboard"), h("span.row-meta", `Move the mouse and type on ${shortName(c)}`)),
       icon("chevron", 18))),
+    shareCard(c),
 
     section("Now playing"),
     h("section.card.player" + (np?.playing ? ".playing" : ""), np ? [
