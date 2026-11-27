@@ -9,6 +9,8 @@
      Nothing connects: app.js skips the relay when NYEKO_PREVIEW is set. ?view=now|mac|nyo|session|settings|launch|pair|quiet|files|fileview|pad -->
 <script>
   const view = new URLSearchParams(location.search).get("view") || "now";
+  // ?app=1: as the Home Screen app (no "You're in Safari" card), for pictures.
+  if (new URLSearchParams(location.search).get("app")) Object.defineProperty(navigator, "standalone", { value: true });
   const relay = "wss://relay.example.workers.dev";
   const A = "A".repeat(22), B = "B".repeat(22), C = "C".repeat(22);
   const quiet = view === "quiet";
@@ -20,8 +22,8 @@
     volume: 62, muted: false, timer: null, recording: false, battery: { percent: 73, charging: false },
     next: { title: "Design review", when: "Today · 4:30 PM" },
     apps: ["Finder", "Safari", "Google Chrome", "Mail", "Notes", "Calendar", "Terminal", "Claude"].map((n) => ({ id: n, name: n })),
-    projects: [{ id: "p1", name: "Kestrel", where: "~/Kestrel" }, { id: "p2", name: "portfolio", where: "~/Projects/portfolio" },
-      { id: "p3", name: "relay", where: "~/Kestrel/android/relay" }],
+    projects: [{ id: "p1", name: "Nyeko", where: "~/Nyeko" }, { id: "p2", name: "portfolio", where: "~/Projects/portfolio" },
+      { id: "p3", name: "relay", where: "~/Nyeko/android/relay" }],
   };
   const items = [
     { r: "you", t: "Why does the build fail on the Windows runner?" },
@@ -31,24 +33,24 @@
     { r: "tools", t: "Bash curl -I https://apple.com" },
     { r: "nyo", t: "301 Redirect → https://www.apple.com/\n\nApple's apex domain redirects to www. No caching (Cache-Control: no-store), served through their CDN." },
   ];
-  if (view === "shared") mac.share = { name: "IT · green", cid: "", side: "left", state: "on" };
+  if (view === "shared") mac.share = { name: "Gaming PC · neko", cid: "", side: "left", state: "on" };
   window.NYEKO_PREVIEW = {
     computers: [
-      { p: { room: A, name: "Neko's MacBook Pro · greenhawk_nyek", relay }, live: { status: "open", os: "macos", desktop: "Neko's MacBook Pro · greenhawk_nyek",
-          sessions: quiet ? [] : [{ pillId: "t1", agent: "Recalling previous conversation", state: "working", statusText: "Terminal · Bash" },
-                                  { pillId: "t2", agent: "kestrel", state: "finished", statusText: "VS Code · Done in 4 min" }],
+      { p: { room: A, name: "Neko's MacBook Pro · studio", relay }, live: { status: "open", os: "macos", desktop: "Neko's MacBook Pro · studio",
+          sessions: quiet ? [] : [{ pillId: "t1", agent: "Shared mouse for Nyeko", state: "working", statusText: "Terminal · Bash" },
+                                  { pillId: "t2", agent: "portfolio", state: "finished", statusText: "VS Code · Done in 4 min" }],
           mac, apps, macAt: Date.now(), usage: { claude: { fiveHour: { pct: 42 }, sevenDay: { pct: 88 } } },
           approval: view === "now" ? { tool: "Bash", command: "uname -a && sw_vers && sysctl -n hw.physicalcpu hw.logicalcpu", at: Date.now(), fingerprint: "x" } : null } },
-      { p: { room: B, name: "IT · green", relay }, live: { status: "open", os: "windows", desktop: "IT · green",
+      { p: { room: B, name: "Gaming PC · neko", relay }, live: { status: "open", os: "windows", desktop: "Gaming PC · neko",
           sessions: quiet ? [] : [{ pillId: "w1", agent: "Claude Code", state: "idle", statusText: "Windows Terminal" }] } },
-      { p: { room: C, name: "Neko's MacBook Pro · nekonyo", relay }, live: { status: "connecting", os: "macos", desktop: "Neko's MacBook Pro · nekonyo" } },
+      { p: { room: C, name: "MacBook Air · neko", relay }, live: { status: "connecting", os: "macos", desktop: "MacBook Air · neko" } },
     ],
     state: {
       tab: { quiet: "now", pair: "add", fileview: "files", shared: "mac" }[view] || view, current: A,
-      thread: view === "session" ? { comp: A, id: "t1", title: "Recalling previous conversation", sub: "", sending: [], open: {},
-        data: { title: "Recalling previous conversation", host: "Terminal", folder: "Kestrel", state: "idle", readable: true, canMessage: true, items, queued: [] } } : null,
-      files: view === "files" || view === "fileview" ? { comp: A, path: "/Users/neko/Kestrel", asked: null, pick: false,
-        folder: { ok: true, path: "/Users/neko/Kestrel", display: "~/Kestrel", parent: "/Users/neko", truncated: false, entries: [
+      thread: view === "session" ? { comp: A, id: "t1", title: "Shared mouse for Nyeko", sub: "", sending: [], open: {},
+        data: { title: "Shared mouse for Nyeko", host: "Terminal", folder: "Nyeko", state: "idle", readable: true, canMessage: true, items, queued: [] } } : null,
+      files: view === "files" || view === "fileview" ? { comp: A, path: "/Users/neko/Nyeko", asked: null, pick: false,
+        folder: { ok: true, path: "/Users/neko/Nyeko", display: "~/Nyeko", parent: "/Users/neko", truncated: false, entries: [
           { name: "NotchBuddy", dir: true, mtime: 1795100000 }, { name: "android", dir: true, mtime: 1795000000 },
           { name: "phone", dir: true, mtime: 1795160000 }, { name: "windows", dir: true, mtime: 1795150000 },
           { name: "CLAUDE.md", dir: false, size: 9120, kind: "text", mtime: 1795100000 },
@@ -58,7 +60,7 @@
         preview: view === "fileview" ? { id: "x", name: "README.md", kind: "text", size: 6044, done: true, got: 1,
           head: { ok: true, kind: "text", size: 6044, chunks: 1, truncated: false },
           text: "# Nyeko\n\nNyo in your notch, keeping an eye on your AI coding sessions.\n\n## What it does\n\n- Shows every Claude Code session, and what it is doing\n- Asks you before a command runs, on the Mac or on your phone\n- Lets you message a session from anywhere\n" } : null } : null,
-      launch: view === "launch" ? { comp: A, project: null, starting: null, folder: { path: "/Users/neko/Kestrel/phone", name: "phone", display: "~/Kestrel/phone" } } : null,
+      launch: view === "launch" ? { comp: A, project: null, starting: null, folder: { path: "/Users/neko/Nyeko/phone", name: "phone", display: "~/Nyeko/phone" } } : null,
       pad: view === "pad" ? { comp: A, mods: new Set(["cmd"]), keyboard: true } : null,
       chat: view === "nyo" ? [{ me: true, text: "What's next today?", comp: A }, { me: false, text: "Design review at 4:30. Nothing else after that.", comp: A }] : [],
     },
