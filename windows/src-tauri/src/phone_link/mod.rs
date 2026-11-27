@@ -19,6 +19,7 @@ mod chat;
 mod chat_backend;
 mod discovery;
 mod files;
+mod remote_input;
 mod hub;
 #[cfg(test)]
 mod interop;

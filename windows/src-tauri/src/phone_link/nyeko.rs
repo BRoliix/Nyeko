@@ -29,7 +29,7 @@ use super::hub::Out;
 pub const PHONE_PREFIX: &str = "The user sent this from their phone:";
 
 /// The phone's messages handled here.
-const TYPES: &[&str] = &["status", "control", "ask", "open", "close", "say", "unqueue", "launch", "listApps", "pushSub", "browse", "preview", "reveal"];
+const TYPES: &[&str] = &["status", "control", "ask", "open", "close", "say", "unqueue", "launch", "listApps", "pushSub", "browse", "preview", "reveal", "input"];
 
 pub fn handles(t: &str) -> bool {
     TYPES.contains(&t)
@@ -882,6 +882,16 @@ impl Conn {
                         }
                     }
                 });
+            }
+            "input" => {
+                // The phone as trackpad and keyboard (remote_input.rs; docs/REMOTE_INPUT.md).
+                let events = msg["e"].as_array().cloned().unwrap_or_default();
+                if events.iter().any(|e| e["k"] == "hello") {
+                    let ok = super::remote_input::supported();
+                    let note = if ok { "" } else { "The trackpad works with Windows and Macs for now." };
+                    let _ = self.tx.try_send(line(json!({ "type": "inputState", "ok": ok, "note": note })));
+                }
+                super::remote_input::handle(&events);
             }
             "reveal" => {
                 // Shows a file or folder in the file manager: selected, never opened.

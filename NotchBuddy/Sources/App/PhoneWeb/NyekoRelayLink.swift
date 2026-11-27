@@ -488,7 +488,7 @@ final class NyekoWebConversation: @unchecked Sendable {
         case .bye:
             end()
         case .other(let type):
-            guard ["control", "ask", "pushSub", "status", "open", "close", "say", "unqueue", "launch", "listApps", "browse", "preview", "reveal"].contains(type),
+            guard ["control", "ask", "pushSub", "status", "open", "close", "say", "unqueue", "launch", "listApps", "browse", "preview", "reveal", "input"].contains(type),
                   let object = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { return }
             onNyeko(object)
         case .hello:

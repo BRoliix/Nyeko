@@ -317,3 +317,28 @@ details.hash code { display: block; margin-top: 6px; font: 11.5px/1.5 var(--mono
   repeating-conic-gradient(#F3E6D4 0 25%, var(--card) 0 50%) 0 0 / 18px 18px; }
 .card.viewer.picture img { max-width: 100%; max-height: 70vh; border-radius: 12px; display: block; }
 .empty-card .meter { margin-top: 8px; }
+
+/* Trackpad and keyboard */
+.pad-surface { position: relative; height: min(56vh, 460px); border: 2px solid var(--ink); border-radius: 28px; box-shadow: var(--lift);
+  background: radial-gradient(circle, #E8D6BF 1.2px, transparent 1.6px) 0 0 / 18px 18px, var(--card); touch-action: none;
+  -webkit-user-select: none; user-select: none; display: grid; place-items: end center; overflow: hidden; margin-top: 6px; }
+.pad-surface.tapped { background-color: var(--sun-soft); }
+.pad-surface.dragging { box-shadow: inset 0 0 0 3px var(--tan), var(--lift); }
+.pad-hint { padding: 0 22px 16px; text-align: center; font-size: 12.5px; color: var(--ink-3); font-weight: 700; pointer-events: none; }
+.pad-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.pad-btn { text-align: center; height: 58px; border: 2px solid var(--ink); border-radius: 18px; background: var(--card); box-shadow: var(--lift);
+  font: 600 16px var(--display); touch-action: none; -webkit-user-select: none; user-select: none; }
+.pad-btn:active { transform: translateY(3px); box-shadow: none; background: var(--fur); }
+.icon-btn.on { background: var(--ink); color: var(--card); }
+.keys { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.key-row { display: flex; gap: 6px; }
+.key { text-align: center; flex: 1; min-width: 0; height: 46px; border: 2px solid var(--ink); border-radius: 13px; background: var(--card);
+  font: 600 15px var(--display); box-shadow: 0 2px 0 var(--ink); }
+.key:active { transform: translateY(2px); box-shadow: none; }
+.key.mod.on { background: var(--tan); }
+.kbd-sink { width: 100%; height: 48px; padding: 12px 16px; border: 2px dashed var(--ink-3); border-radius: 16px; background: transparent;
+  font-size: 16px; resize: none; outline: none; caret-color: transparent; color: transparent; }
+.kbd-sink::placeholder { color: var(--ink-3); }
+.kbd-sink:focus { border-color: var(--tan); }
+
+.pad-entry { margin-top: 6px; }

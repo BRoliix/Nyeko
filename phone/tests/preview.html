@@ -6,7 +6,7 @@
 <title>Nyeko · design preview</title>
 <link rel="stylesheet" href="/style.css">
 <!-- A still picture of the web app with made-up computers, for checking the design (node phone/tests/preview-server.mjs).
-     Nothing connects: app.js skips the relay when NYEKO_PREVIEW is set. ?view=now|mac|nyo|session|settings|launch|pair|quiet|files|fileview -->
+     Nothing connects: app.js skips the relay when NYEKO_PREVIEW is set. ?view=now|mac|nyo|session|settings|launch|pair|quiet|files|fileview|pad -->
 <script>
   const view = new URLSearchParams(location.search).get("view") || "now";
   const relay = "wss://relay.example.workers.dev";
@@ -58,6 +58,7 @@
           head: { ok: true, kind: "text", size: 6044, chunks: 1, truncated: false },
           text: "# Nyeko\n\nNyo in your notch, keeping an eye on your AI coding sessions.\n\n## What it does\n\n- Shows every Claude Code session, and what it is doing\n- Asks you before a command runs, on the Mac or on your phone\n- Lets you message a session from anywhere\n" } : null } : null,
       launch: view === "launch" ? { comp: A, project: null, starting: null, folder: { path: "/Users/neko/Kestrel/phone", name: "phone", display: "~/Kestrel/phone" } } : null,
+      pad: view === "pad" ? { comp: A, mods: new Set(["cmd"]), keyboard: true } : null,
       chat: view === "nyo" ? [{ me: true, text: "What's next today?", comp: A }, { me: false, text: "Design review at 4:30. Nothing else after that.", comp: A }] : [],
     },
   };

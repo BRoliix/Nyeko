@@ -1,6 +1,6 @@
 // Nyeko phone web app: the app shell offline, and the lock-screen alert.
 // The Mac's push carries no payload, so there is nothing to read here: the alert is always the same words.
-const CACHE = "nyeko-v9";
+const CACHE = "nyeko-v10";
 const SHELL = ["/", "/index.html", "/app.js", "/relay.js", "/setup.js", "/nyo.js", "/style.css", "/fonts/fredoka.woff2", "/fonts/nunito.woff2", "/manifest.webmanifest",
   "/icons/icon-180.png", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/favicon.svg"];
 

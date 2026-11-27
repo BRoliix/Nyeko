@@ -5,7 +5,7 @@ import { PhoneChannel, b64url, fromB64url, random } from "./relay.js";
 import { parseSetup, sendSetup } from "./setup.js";
 import { drawNyoStill } from "./nyo.js";
 
-const VERSION = "2026-11-25 · nyeko 10";   // shown in Settings: tells which web app the phone runs
+const VERSION = "2026-11-27 · nyeko 11";   // shown in Settings: tells which web app the phone runs
 const STORE = { computers: "nyeko.computers", current: "nyeko.current", cred: "nyeko.faceid", alerts: "nyeko.alerts", oldPairing: "nyeko.pairing" };
 const APPROVAL_TTL = 115_000; // the computer dismisses a request after 115 s
 const app = document.getElementById("app");
@@ -100,6 +100,8 @@ const ICONS = {
   file: ["M7 3.5h6.5L18 8v11a1.5 1.5 0 01-1.5 1.5h-9.5A1.5 1.5 0 015.5 19V5A1.5 1.5 0 017 3.5z", "M13.5 3.5V8H18", "M8.5 12.5h7M8.5 16h5"],
   image: ["M4 6A1.5 1.5 0 015.5 4.5h13A1.5 1.5 0 0120 6v12a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 014 18z", "M4.5 16l4.5-4.5 3.5 3.5 2.5-2.5 4.5 4.5", "M15 8.5a1.2 1.2 0 110 2.4 1.2 1.2 0 010-2.4z"],
   up: ["M12 19V6M6 11.5L12 5.5l6 6"],
+  keyboard: ["M3.5 7.5A1.5 1.5 0 015 6h14a1.5 1.5 0 011.5 1.5v9A1.5 1.5 0 0119 18H5a1.5 1.5 0 01-1.5-1.5z", "M7 10h.01M10.5 10h.01M14 10h.01M17.5 10h.01M8 14h8"],
+  pointer: ["M6 3.5l12 7.5-5.2 1.3 3 5.6-2.4 1.3-3-5.6L6.5 18z"],
   play: ["M8 5.5v13l10.5-6.5z"], pause: ["M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"],
   next: ["M5.5 6l8.5 6-8.5 6zM16 6h2.5v12H16z"], prev: ["M18.5 6L10 12l8.5 6zM5.5 6H8v12H5.5z"],
 };
@@ -378,6 +380,7 @@ function onLine(c, m) {
       if (m.os) c.os = m.os;
       break;
     case "apps": c.apps = Array.isArray(m.apps) ? m.apps : []; break;
+    case "inputState": c.inputState = { ok: !!m.ok, note: typeof m.note === "string" ? m.note.slice(0, 300) : "" }; break;
     case "folder": {
       const F = state.files;
       if (!F || F.comp !== c.id || F.asked !== m.id) break;
@@ -763,6 +766,11 @@ function computerTab() {
       h("span.tile.fur", icon("calendar")),
       h("span.row-main", h("span.row-meta", "Next up"), h("span.row-title", m.next.title), h("span.row-meta", m.next.when))) : null,
 
+    h("section.card.list.pad-entry", h("button.row-btn", { onclick: () => openPad(c) },
+      h("span.tile.mint", icon("pointer", 20)),
+      h("span.row-main", h("span.row-title", "Trackpad and keyboard"), h("span.row-meta", `Move the mouse and type on ${shortName(c)}`)),
+      icon("chevron", 18))),
+
     section("Now playing"),
     h("section.card.player" + (np?.playing ? ".playing" : ""), np ? [
       h("div.player-top",
@@ -1087,6 +1095,153 @@ function filesTab() {
   ];
 }
 
+// ── The phone as trackpad and keyboard (docs/REMOTE_INPUT.md) ───────────────────────────────────────────────────
+
+/** Opens the trackpad for computer `c` (behind Face ID: whoever holds the phone moves the computer's mouse). */
+async function openPad(c) {
+  if (!c) return;
+  if (c.status !== "open") return toast(`${shortName(c)} is not connected.`);
+  if (!(await unlock())) return;
+  state.pad = { comp: c.id, mods: new Set(), keyboard: false };
+  c.inputState = null;
+  state.tab = "pad";
+  padSend(c, [{ k: "hello" }]);
+  render();
+}
+
+function closePad() {
+  const P = state.pad;
+  const c = comp(P?.comp);
+  if (c) padSend(c, [{ k: "release" }]);
+  state.pad = null;
+  state.tab = "mac";
+  render();
+}
+
+// Moves and scrolls are added up and sent about 25 times a second (the relay takes 30 frames a second from a phone).
+const pad = { move: [0, 0], scroll: [0, 0], timer: null };
+function padSend(c, events) {
+  const e = [];
+  if (pad.move[0] || pad.move[1]) e.push({ k: "move", dx: Math.round(pad.move[0] * 10) / 10, dy: Math.round(pad.move[1] * 10) / 10 });
+  if (pad.scroll[0] || pad.scroll[1]) e.push({ k: "scroll", dx: Math.round(pad.scroll[0]), dy: Math.round(pad.scroll[1]) });
+  pad.move = [0, 0]; pad.scroll = [0, 0];
+  e.push(...events);
+  if (e.length) send(c, { type: "input", e });
+}
+function padQueue(kind, dx, dy) {
+  const P = state.pad;
+  const c = comp(P?.comp);
+  if (!c) return;
+  pad[kind][0] += dx; pad[kind][1] += dy;
+  if (!pad.timer) pad.timer = setTimeout(() => { pad.timer = null; padSend(c, []); }, 40);
+}
+
+/** The touch surface: one finger moves, a tap clicks, two fingers scroll, a two-finger tap right-clicks, hold then
+ *  move drags. Built once per render; its state lives in the closure. */
+function touchSurface(c) {
+  const el = h("div.pad-surface", { role: "application", "aria-label": `Trackpad for ${shortName(c)}` },
+    h("div.pad-hint", "Move with one finger · tap to click · two fingers scroll · two-finger tap right-clicks · hold, then move to drag"));
+  let t0 = 0, moved = 0, maxFingers = 0, last = null, hold = null, dragging = false, lastTap = 0, lastAt = 0;
+  const center = (ts) => { let x = 0, y = 0; for (const t of ts) { x += t.clientX; y += t.clientY; } return [x / ts.length, y / ts.length]; };
+  el.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    if (e.touches.length === e.changedTouches.length) { t0 = performance.now(); moved = 0; maxFingers = 0; }
+    maxFingers = Math.max(maxFingers, e.touches.length);
+    last = center(e.touches); lastAt = performance.now();
+    clearTimeout(hold);
+    if (e.touches.length === 1 && !dragging) hold = setTimeout(() => {
+      if (moved < 10) { dragging = true; el.classList.add("dragging"); padSend(c, [{ k: "down", b: "left" }]); navigator.vibrate?.(15); }
+    }, 420);
+  }, { passive: false });
+  el.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    const now = performance.now();
+    const p = center(e.touches);
+    const dx = p[0] - last[0], dy = p[1] - last[1];
+    const dt = Math.max(1, now - lastAt);
+    last = p; lastAt = now;
+    moved += Math.hypot(dx, dy);
+    if (moved > 10 && !dragging) clearTimeout(hold);
+    if (e.touches.length >= 2) padQueue("scroll", -dx * 1.4, -dy * 1.4);
+    else {
+      const speed = Math.hypot(dx, dy) / dt;                 // px per ms
+      const gain = 1.4 + Math.min(3.2, speed * 2.2);        // slow and precise, fast and far
+      padQueue("move", dx * gain, dy * gain);
+    }
+  }, { passive: false });
+  const end = (e) => {
+    e.preventDefault();
+    if (e.touches.length) { last = center(e.touches); return; }
+    clearTimeout(hold);
+    if (dragging) { dragging = false; el.classList.remove("dragging"); padSend(c, [{ k: "up", b: "left" }]); return; }
+    if (moved < 10 && performance.now() - t0 < 280) {
+      if (maxFingers >= 2) padSend(c, [{ k: "click", b: "right", n: 1 }]);
+      else { const now = performance.now(); padSend(c, [{ k: "click", b: "left", n: now - lastTap < 350 ? 2 : 1 }]); lastTap = now; }
+      el.classList.add("tapped"); setTimeout(() => el.classList.remove("tapped"), 120);
+    }
+  };
+  el.addEventListener("touchend", end, { passive: false });
+  el.addEventListener("touchcancel", end, { passive: false });
+  // A desktop browser: the mouse works too (handy for trying it out).
+  let mdown = null;
+  el.addEventListener("pointerdown", (e) => { if (e.pointerType === "mouse") { mdown = [e.clientX, e.clientY]; el.setPointerCapture(e.pointerId); } });
+  el.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse" && mdown) { padQueue("move", e.clientX - mdown[0], e.clientY - mdown[1]); mdown = [e.clientX, e.clientY]; } });
+  el.addEventListener("pointerup", (e) => { if (e.pointerType === "mouse") mdown = null; });
+  return el;
+}
+
+const MAC_MODS = [["cmd", "⌘"], ["alt", "⌥"], ["ctrl", "⌃"], ["shift", "⇧"]];
+const PC_MODS = [["ctrl", "Ctrl"], ["alt", "Alt"], ["shift", "Shift"], ["win", "Win"]];
+const KEYS = [["esc", "Esc"], ["tab", "Tab"], ["left", "←"], ["up", "↑"], ["down", "↓"], ["right", "→"], ["backspace", "⌫"], ["enter", "↵"]];
+
+function padTab() {
+  const P = state.pad;
+  const c = comp(P?.comp);
+  if (!P || !c) { state.tab = "mac"; return computerTab(); }
+  const isMac = c.os !== "windows" && c.os !== "linux";
+  const mods = [...P.mods];
+  const press = (key) => { padSend(c, [{ k: "key", key, mods }]); if (P.mods.size) { P.mods.clear(); render(); } };
+  const st = c.inputState;
+  return [
+    h("div.session-bar",
+      h("button.icon-btn", { "aria-label": "Back", onclick: closePad }, icon("back")),
+      h("div.session-title", h("div.track", "Trackpad"), h("div.row-meta", shortName(c))),
+      h("button.icon-btn" + (P.keyboard ? ".on" : ""), { "aria-label": P.keyboard ? "Hide the keyboard" : "Show the keyboard", "aria-pressed": P.keyboard ? "true" : "false",
+        onclick: () => { P.keyboard = !P.keyboard; render(); if (P.keyboard) setTimeout(() => document.getElementById("kbd")?.focus(), 30); } }, icon("keyboard"))),
+    many() ? picker((x) => { padSend(c, [{ k: "release" }]); P.comp = x.id; x.inputState = null; padSend(x, [{ k: "hello" }]); }) : null,
+    c.status !== "open" ? h("p.note.center", `${shortName(c)} is not connected.`)
+      : st && !st.ok ? h("section.card.tinted", h("div.card-body", h("div.title", "One thing on the computer"), h("p.sub", st.note || "This computer can't take the trackpad yet."))) : null,
+    touchSurface(c),
+    h("div.pad-buttons",
+      ...["left", "right"].map((b) => h("button.pad-btn", {
+        "aria-label": b === "left" ? "Left click (hold to keep pressed)" : "Right click",
+        onpointerdown: (e) => { e.preventDefault(); padSend(c, [{ k: "down", b }]); },
+        onpointerup: () => padSend(c, [{ k: "up", b }]), onpointercancel: () => padSend(c, [{ k: "up", b }]),
+      }, b === "left" ? "Left" : "Right"))),
+    P.keyboard ? h("div.keys",
+      h("div.key-row", (isMac ? MAC_MODS : PC_MODS).map(([m, label]) => h("button.key.mod" + (P.mods.has(m) ? ".on" : ""), {
+        "aria-pressed": P.mods.has(m) ? "true" : "false", onclick: () => { P.mods.has(m) ? P.mods.delete(m) : P.mods.add(m); render(); setTimeout(() => document.getElementById("kbd")?.focus(), 0); } }, label))),
+      h("div.key-row", KEYS.map(([k, label]) => h("button.key", { "aria-label": k, onclick: () => { press(k); document.getElementById("kbd")?.focus(); } }, label))),
+      // What the phone's own keyboard types goes through this box (kept empty).
+      h("textarea#kbd.kbd-sink", { autocapitalize: "off", autocomplete: "off", autocorrect: "off", spellcheck: "false", "aria-label": "Type on the computer",
+        placeholder: "Type here", rows: "1",
+        onbeforeinput: (e) => {
+          e.preventDefault();
+          const t = e.inputType;
+          if (t === "insertText" || t === "insertFromPaste" || t === "insertReplacementText") {
+            const text = e.data ?? e.dataTransfer?.getData("text/plain") ?? "";
+            if (!text) return;
+            if (P.mods.size && text.length === 1) press(text.toLowerCase());
+            else padSend(c, [{ k: "text", t: text.slice(0, 500) }]);
+          } else if (t === "insertLineBreak" || t === "insertParagraph") press("enter");
+          else if (t === "deleteContentBackward" || t === "deleteWordBackward") press("backspace");
+          else if (t === "deleteContentForward") press("delete");
+        },
+        oninput: (e) => { const v = e.target.value; e.target.value = ""; if (v) padSend(c, [{ k: "text", t: v.slice(0, 500) }]); },
+      })) : null,
+  ];
+}
+
 function launchTab() {
   const L = state.launch || (state.launch = { comp: cur()?.id, project: null, starting: null });
   const c = comp(L.comp) || cur();
@@ -1258,7 +1413,15 @@ function tabs() {
 
 // ── render ───────────────────────────────────────────────────────────────────────────────────────────
 
+let padShown = "";
 function render() {
+  // The trackpad isn't drawn again for status updates: a finger on it would lose its touch, the keyboard its focus.
+  if (state.tab === "pad" && state.pad && !state.androidOffer) {
+    const c = comp(state.pad.comp);
+    const key = JSON.stringify([state.pad.comp, state.pad.keyboard, [...state.pad.mods], c?.status, c?.inputState, many(), state.computers.map((x) => x.status)]);
+    if (key === padShown && app.querySelector(".pad-surface")) return;
+    padShown = key;
+  } else padShown = "";
   // Keep what is being typed (a status update re-renders the screen).
   const active = document.activeElement;
   const keep = active && active.id ? { id: active.id, value: active.value, start: active.selectionStart } : null;
@@ -1276,11 +1439,11 @@ function render() {
   if (state.androidOffer) view = androidScreen();
   else if (!paired || state.tab === "add") view = pairScreen();
   else {
-    const body = { now: nowTab, mac: computerTab, nyo: nyoTab, settings: settingsTab, session: sessionTab, launch: launchTab, files: filesTab }[state.tab]?.() ?? nowTab();
+    const body = { now: nowTab, mac: computerTab, nyo: nyoTab, settings: settingsTab, session: sessionTab, launch: launchTab, files: filesTab, pad: padTab }[state.tab]?.() ?? nowTab();
     const main = ["now", "mac", "nyo"].includes(state.tab);
     view = h("main.screen" + (state.tab === "session" ? ".chatting" : "") + (state.tab === "nyo" ? ".chatting" : ""), main ? header() : null, body);
   }
-  app.replaceChildren(view, paired && !state.androidOffer && !["settings", "session", "launch", "add", "files"].includes(state.tab) ? tabs() : "",
+  app.replaceChildren(view, paired && !state.androidOffer && !["settings", "session", "launch", "add", "files", "pad"].includes(state.tab) ? tabs() : "",
     state.toast ? h("div.toast", { role: "status" }, state.toast) : "");
 
   const ask = document.getElementById("ask");
@@ -1324,6 +1487,11 @@ function render() {
   state.current = load(STORE.current) || state.computers[0]?.id || null;
   if (load(STORE.alerts) === true) save(STORE.alerts, alertsComputer()?.id ?? null);   // alerts were on for the one Mac
 }
+
+// The trackpad never leaves a button held when the phone locks or switches app.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && state.pad) { const c = comp(state.pad.comp); if (c) padSend(c, [{ k: "release" }]); }
+});
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 if (location.hash.startsWith("#pair=") && (standalone() || !isIOS)) {

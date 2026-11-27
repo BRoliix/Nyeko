@@ -513,6 +513,15 @@ final class NyekoPhoneService: ObservableObject {
                 }
                 await NyekoPhoneService.shared.sendLines(lines, to: kind)
             }
+        case "input":
+            // The phone as trackpad and keyboard (MacRemoteInput; docs/REMOTE_INPUT.md).
+            let events = (object["e"] as? [[String: Any]]) ?? []
+            if events.contains(where: { $0["k"] as? String == "hello" }) {
+                let ok = MacRemoteInput.ready(ask: true)
+                client?.sendNyeko(["type": "inputState", "ok": ok,
+                    "note": ok ? "" : "Allow Nyeko in System Settings › Privacy & Security › Accessibility on the Mac, then try again."])
+            }
+            MacRemoteInput.handle(events)
         case "reveal":
             // Shows a file or folder in the Finder: selected, never opened.
             if let url = NyekoFiles.resolve(object["path"] as? String) {
