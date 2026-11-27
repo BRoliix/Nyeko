@@ -1,6 +1,6 @@
 <div align="center">
 
-<a href="docs/media/hero.mp4"><img src="docs/media/hero.gif" width="900" alt="Nyo, a tabby kitten, sits in a MacBook notch and goes from idle to thinking, working, asking 'can I run git push?' and 'all done!', next to the word Nyeko."></a>
+<a href="docs/readme/hero.mp4"><img src="docs/readme/hero.gif" width="900" alt="Nyo, a tabby kitten, sits in a MacBook notch and goes from idle to thinking, working, asking 'can I run git push?' and 'all done!', next to the word Nyeko."></a>
 
 **Nyo lives in your Mac's notch (or at the top of your PC's screen). He keeps an eye on your AI coding agents,<br>
 taps you on the shoulder when they need you, and turns your phone into the remote for all your computers.**
@@ -28,7 +28,7 @@ iPhone, so every blink, ear twitch and tail flick happens live. His face tells y
 without you reading a single line:
 
 <div align="center">
-<a href="docs/media/moods.mp4"><img src="docs/media/moods.gif" width="800" alt="Twelve cards, one for each of Nyo's moods: idle, thinking, working, searching, needs you, question, finished, error, rate limited, sleeping, dizzy and loved."></a>
+<a href="docs/readme/moods.mp4"><img src="docs/readme/moods.gif" width="800" alt="Twelve cards, one for each of Nyo's moods: idle, thinking, working, searching, needs you, question, finished, error, rate limited, sleeping, dizzy and loved."></a>
 </div>
 
 He also has **29 sounds of his own**, made from nothing but maths (`python3 scripts/nyeko-sounds.py` writes them), and
@@ -45,8 +45,8 @@ happens, and the island at the top of your screen shows it: what the session is 
 when it wants your permission. You answer **right there**, without finding the terminal again.
 
 <div align="center">
-<a href="docs/media/island.mp4"><img src="docs/media/island.gif" width="900" alt="The island at the top of the screen: Nyo greets, a session starts, the island shows it reading server.rs, editing MacShare.swift and running cargo test, then asks for permission to run git push; Allow is pressed and the island says Claude Code finished."></a>
-<br><sub>The real island, running its own code with a made-up session. <a href="docs/media/island.mp4">▶ Watch the video</a></sub>
+<a href="docs/readme/island.mp4"><img src="docs/readme/island.gif" width="900" alt="The island at the top of the screen: Nyo greets, a session starts, the island shows it reading server.rs, editing MacShare.swift and running cargo test, then asks for permission to run git push; Allow is pressed and the island says Claude Code finished."></a>
+<br><sub>The real island, running its own code with a made-up session. <a href="docs/readme/island.mp4">▶ Watch the video</a></sub>
 </div>
 
 - **Every session, one by one.** Claude Code, Codex, Gemini CLI, Antigravity, GitHub Copilot CLI, OpenCode, Amp,
@@ -62,7 +62,7 @@ when it wants your permission. You answer **right there**, without finding the t
   (GitHub, Vercel, Stripe, n8n, Notion, Resend…) and "OK Nyeko".
 
 <div align="center">
-<img src="docs/media/window.png" width="900" alt="Three windows of the Nyeko app: Dictation, Notetaker and Statistics.">
+<img src="docs/readme/window.png" width="900" alt="Three windows of the Nyeko app: Dictation, Notetaker and Statistics.">
 </div>
 
 ---
@@ -76,12 +76,12 @@ your computers** (every Mac account and every Windows PC is its own), and everyt
 end-to-end encrypted.
 
 <div align="center">
-<img src="docs/media/phone-app.png" width="900" alt="Five phone screens: Now with a permission card, a session's conversation, the Computers page, the trackpad and the file browser.">
+<img src="docs/readme/phone-app.png" width="900" alt="Five phone screens: Now with a permission card, a session's conversation, the Computers page, the trackpad and the file browser.">
 </div>
 
 <div align="center">
-<a href="docs/media/phone.mp4"><img src="docs/media/phone.gif" width="620" alt="A phone walking through the app: approve from anywhere, talk to a session, your computers, a trackpad in your pocket, open any folder."></a>
-<br><sub><a href="docs/media/phone.mp4">▶ Watch the video</a></sub>
+<a href="docs/readme/phone.mp4"><img src="docs/readme/phone.gif" width="620" alt="A phone walking through the app: approve from anywhere, talk to a session, your computers, a trackpad in your pocket, open any folder."></a>
+<br><sub><a href="docs/readme/phone.mp4">▶ Watch the video</a></sub>
 </div>
 
 | | |
@@ -104,7 +104,7 @@ Got a Mac and a Windows laptop side by side? Push the pointer off the edge of on
 and touching the other computer's own mouse takes it straight back.
 
 <div align="center">
-<a href="docs/media/share.mp4"><img src="docs/media/share.gif" width="760" alt="A PC and a Mac side by side: the pointer leaves the Mac by its left edge, appears on the PC, types a sentence there, then goes back to the Mac."></a>
+<a href="docs/readme/share.mp4"><img src="docs/readme/share.gif" width="760" alt="A PC and a Mac side by side: the pointer leaves the Mac by its left edge, appears on the PC, types a sentence there, then goes back to the Mac."></a>
 </div>
 
 Your phone only introduces them (Computers → **One mouse for both** → which side the PC is on). After that the two
@@ -117,7 +117,7 @@ talk to each other directly over your Wi-Fi. The details are in [`docs/SHARED_MO
 ## 🔧 How it works
 
 <div align="center">
-<img src="docs/media/how-it-works.png" width="900" alt="Diagram: your AI agents talk to Nyeko through nyeko-hook; Nyeko talks to your own relay (encrypted), which talks to your phones; the Mac and the PC share a mouse over the Wi-Fi.">
+<img src="docs/readme/how-it-works.png" width="900" alt="Diagram: your AI agents talk to Nyeko through nyeko-hook; Nyeko talks to your own relay (encrypted), which talks to your phones; the Mac and the PC share a mouse over the Wi-Fi.">
 </div>
 
 | Part | Where | What it is |
